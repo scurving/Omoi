@@ -36,7 +36,7 @@ struct SanitizeResponse: Codable {
 }
 
 class APIService {
-    private let baseURL = URL(string: "http://127.0.0.1:8000")!
+    private let baseURL = URL(string: "http://127.0.0.1:58724")!
 
     func transcribeAudio(fileURL: URL) -> AnyPublisher<TranscriptionResponse, Error> {
         // Check backend status

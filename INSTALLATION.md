@@ -105,7 +105,7 @@ python main.py
 🚀 Server starting - loading models in background...
 ✅ Whisper model loaded
 ✅ All models ready!
-INFO:     Uvicorn running on http://0.0.0.0:8000
+INFO:     Uvicorn running on http://0.0.0.0:58724
 ```
 
 Press `Ctrl+C` to stop the test server (the app will auto-start it later).
@@ -246,8 +246,8 @@ Once installed:
 # Check if backend process is running
 ps aux | grep "python.*main.py"
 
-# Check port 8000
-lsof -i :8000
+# Check port 58724
+lsof -i :58724
 
 # Test backend manually
 cd backend
@@ -265,10 +265,10 @@ brew install ffmpeg
 brew install python@3.12
 ```
 
-#### Port 8000 already in use
+#### Port 58724 already in use
 ```bash
-# Kill process using port 8000
-lsof -ti:8000 | xargs kill -9
+# Kill process using port 58724
+lsof -ti:58724 | xargs kill -9
 # Restart Omoi
 ```
 
@@ -285,7 +285,7 @@ ls -lh ~/.cache/whisper/
 
 #### App crashes on launch
 - Check Console.app for error messages
-- Verify backend is running: `curl http://127.0.0.1:8000/health`
+- Verify backend is running: `curl http://127.0.0.1:58724/health`
 - Check microphone permissions in System Settings
 
 #### Auto-paste doesn't work
@@ -432,10 +432,10 @@ export LOG_LEVEL=DEBUG  # For verbose logging
 2. Review Console.app for error messages (filter: "Omoi")
 3. Verify all prerequisites are installed
 4. Ensure Ollama service is running
-5. Check backend is accessible: `curl http://127.0.0.1:8000/health`
+5. Check backend is accessible: `curl http://127.0.0.1:58724/health`
 
 For issues not covered here, please open an issue on GitHub with:
 - Your macOS version
 - Error messages from Console.app
-- Output from `curl http://127.0.0.1:8000/health`
+- Output from `curl http://127.0.0.1:58724/health`
 - Output from `ollama list`

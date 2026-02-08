@@ -17,8 +17,8 @@ class BackendManager: ObservableObject {
 
     private var backendProcess: Process?
     private var healthCheckTimer: Timer?
-    private let backendPort = 8000
-    private let backendURL = URL(string: "http://127.0.0.1:8000")!
+    private let backendPort = 58724
+    private let backendURL = URL(string: "http://127.0.0.1:58724")!
     private let backendPath = "/Users/ptz/Projects/Wisprrd/backend"
 
     private var failureCount = 0
@@ -147,7 +147,7 @@ class BackendManager: ObservableObject {
         healthCheckTimer?.invalidate()
         healthCheckTimer = nil
 
-        // Kill ANY process on port 8000 with SIGKILL (not just our tracked process)
+        // Kill ANY process on backend port with SIGKILL (not just our tracked process)
         killProcessOnPort(backendPort)
 
         backendProcess = nil

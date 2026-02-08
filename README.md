@@ -195,7 +195,7 @@ Wisprrd/
 - Optional Qwen3-TTS for text-to-speech
 - Ollama integration for text transformations
 - Non-blocking async I/O with thread pool
-- RESTful API endpoints on `http://localhost:8000`
+- RESTful API endpoints on `http://localhost:58724`
 
 ### Communication
 - Frontend ↔ Backend: HTTP REST API (localhost only)
@@ -279,8 +279,8 @@ python3.12 -m venv venv
 # Check if backend process is running
 ps aux | grep "python.*main.py"
 
-# Check port 8000
-lsof -i :8000
+# Check port 58724
+lsof -i :58724
 
 # Test backend manually
 cd backend
@@ -441,7 +441,7 @@ ollama list
    cd backend
    source venv/bin/activate
    python main.py
-   # Server runs on http://localhost:8000
+   # Server runs on http://localhost:58724
    ```
 
 2. **Frontend**:
