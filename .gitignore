@@ -1,0 +1,41 @@
+# Python
+backend/venv/
+backend/__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.Python
+build/
+dist/
+
+# Swift/Xcode
+frontend/SuperWhispr/.build/
+*.xcworkspace/
+xcuserdata/
+.swiftpm/
+DerivedData/
+
+# IDE
+.claude/
+.cursor/
+.vscode/
+.idea/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Environment
+.env
+.env.local
+
+# Internal Documentation (not for public release)
+AGENTS.md
+Research/
+docs/plans/
+frontend/SuperWhispr/docs/plans/
+UI_REDESIGN_STRATEGY.md
+**/thinking/
+**/.thinking/
+*.thinking.md
