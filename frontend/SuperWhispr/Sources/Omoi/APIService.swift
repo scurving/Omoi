@@ -38,7 +38,7 @@ struct SanitizeResponse: Codable {
 class APIService {
     private let baseURL = URL(string: "http://127.0.0.1:58724")!
 
-    func transcribeAudio(fileURL: URL) -> AnyPublisher<TranscriptionResponse, Error> {
+    func transcribeAudio(fileURL: URL, language: String = "auto") -> AnyPublisher<TranscriptionResponse, Error> {
         // Check backend status
         switch BackendManager.shared.status {
         case .failed(_):
@@ -62,6 +62,13 @@ class APIService {
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
 
         var data = Data()
+
+        // Add language parameter
+        data.append("--\(boundary)\r\n".data(using: .utf8)!)
+        data.append("Content-Disposition: form-data; name=\"language\"\r\n\r\n".data(using: .utf8)!)
+        data.append("\(language)\r\n".data(using: .utf8)!)
+
+        // Add audio file
         data.append("--\(boundary)\r\n".data(using: .utf8)!)
         data.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(fileURL.lastPathComponent)\"\r\n".data(using: .utf8)!)
         data.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)

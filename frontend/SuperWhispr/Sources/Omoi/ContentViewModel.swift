@@ -176,7 +176,9 @@ class ContentViewModel: ObservableObject {
     // MARK: - API Communication
     private func transcribeAudio(url: URL, duration: TimeInterval) {
         print("🌐 Transcribing audio...")
-        apiService.transcribeAudio(fileURL: url)
+        let language = UserDefaults.standard.string(forKey: "transcriptionLanguage") ?? "auto"
+        print("   Language: \(language)")
+        apiService.transcribeAudio(fileURL: url, language: language)
             .sink(receiveCompletion: { [weak self] completion in
                 if case .failure(let error) = completion {
                     print("❌ Transcription failed: \(error.localizedDescription)")

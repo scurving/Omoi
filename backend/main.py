@@ -78,18 +78,27 @@ async def health_check():
     return {"status": "ok", "models_ready": models_ready}
 
 # --- Transcription ---
-def _sync_transcribe(audio_path: str) -> dict:
+def _sync_transcribe(audio_path: str, language: str = None) -> dict:
     """Synchronous transcription - runs in thread pool."""
-    return whisper_model.transcribe(
-        audio_path,
-        fp16=False,
-        language="en",
-        task="transcribe"
-    )
+    kwargs = {
+        "fp16": False,
+        "task": "transcribe"
+    }
+
+    # Only specify language if provided (otherwise Whisper auto-detects)
+    if language and language != "auto":
+        kwargs["language"] = language
+
+    return whisper_model.transcribe(audio_path, **kwargs)
 
 @app.post("/transcribe")
-async def transcribe_audio(file: UploadFile = File(...)):
-    """Transcribe audio using Whisper. Non-blocking."""
+async def transcribe_audio(file: UploadFile = File(...), language: str = None):
+    """Transcribe audio using Whisper. Non-blocking.
+
+    Args:
+        file: Audio file to transcribe
+        language: Optional language code (e.g., 'en', 'es', 'fr', 'auto' for auto-detect)
+    """
     if not models_ready:
         raise HTTPException(status_code=503, detail="Models still loading, please wait...")
 
@@ -100,7 +109,10 @@ async def transcribe_audio(file: UploadFile = File(...)):
             buffer.write(await file.read())
 
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(executor, _sync_transcribe, temp_audio_path)
+        result = await loop.run_in_executor(
+            executor,
+            lambda: _sync_transcribe(temp_audio_path, language)
+        )
 
         transcribed_text = result["text"]
         segments = result.get("segments", [])

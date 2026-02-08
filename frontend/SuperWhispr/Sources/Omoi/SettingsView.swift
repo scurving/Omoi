@@ -17,6 +17,7 @@ struct SettingsView: View {
     @State private var showingDeleteRecordingsAlert = false
 
     @AppStorage("saveRecordingsForPlayback") private var saveRecordingsForPlayback = true
+    @AppStorage("transcriptionLanguage") private var transcriptionLanguage = "auto"
 
     var body: some View {
         ScrollView {
@@ -71,6 +72,53 @@ struct SettingsView: View {
                         Text("Note: Fn key combinations not supported")
                             .font(OmoiFont.caption)
                             .foregroundStyle(Color.omoiOrange)
+                    }
+                }
+
+                // Transcription Settings Section
+                settingsSection(title: "TRANSCRIPTION") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text("LANGUAGE")
+                                .font(OmoiFont.label(size: 11))
+                                .foregroundStyle(Color.omoiMuted)
+                                .frame(width: 80, alignment: .leading)
+
+                            Spacer()
+
+                            Picker("", selection: $transcriptionLanguage) {
+                                Text("Auto-Detect").tag("auto")
+                                Text("English").tag("en")
+                                Text("Spanish").tag("es")
+                                Text("French").tag("fr")
+                                Text("German").tag("de")
+                                Text("Italian").tag("it")
+                                Text("Portuguese").tag("pt")
+                                Text("Dutch").tag("nl")
+                                Text("Russian").tag("ru")
+                                Text("Chinese").tag("zh")
+                                Text("Japanese").tag("ja")
+                                Text("Korean").tag("ko")
+                                Text("Arabic").tag("ar")
+                                Text("Hindi").tag("hi")
+                                Text("Turkish").tag("tr")
+                                Text("Polish").tag("pl")
+                                Text("Swedish").tag("sv")
+                                Text("Norwegian").tag("no")
+                                Text("Danish").tag("da")
+                                Text("Finnish").tag("fi")
+                            }
+                            .labelsHidden()
+                            .frame(minWidth: 150)
+                        }
+
+                        Text("Auto-detect will identify the language automatically")
+                            .font(OmoiFont.caption)
+                            .foregroundStyle(Color.omoiMuted)
+
+                        Text("Whisper supports 99 languages total")
+                            .font(OmoiFont.caption)
+                            .foregroundStyle(Color.omoiTeal.opacity(0.7))
                     }
                 }
 
