@@ -25,6 +25,10 @@ struct StorageManager {
     private var goalsFile: URL {
         return dataDirectory.appendingPathComponent("goals.json")
     }
+    
+    private var retrospectivesFile: URL {
+        return dataDirectory.appendingPathComponent("retrospectives.json")
+    }
 
     // MARK: - Data Integrity
 
@@ -306,6 +310,64 @@ struct StorageManager {
         } catch {
             print("❌ Failed to load goals: \(error)")
             return []
+        }
+    }
+    
+    // MARK: - Retrospectives Storage
+    
+    struct DailyRetro: Codable {
+        let date: Date
+        let content: String
+    }
+    
+    func saveRetrospective(_ text: String, for date: Date) {
+        var retros = loadRetrospectivesMap()
+        // Normalized date (start of day) to avoid time issues
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        
+        retros[startOfDay] = text
+        
+        saveRetrospectivesMap(retros)
+    }
+    
+    func loadRetrospective(for date: Date) -> String? {
+        let retros = loadRetrospectivesMap()
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        
+        return retros[startOfDay]
+    }
+    
+    private func loadRetrospectivesMap() -> [Date: String] {
+        guard FileManager.default.fileExists(atPath: retrospectivesFile.path) else { return [:] }
+        
+        do {
+            let data = try Data(contentsOf: retrospectivesFile)
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let items = try decoder.decode([DailyRetro].self, from: data)
+            
+            // Convert list to map
+            return Dictionary(uniqueKeysWithValues: items.map { ($0.date, $0.content) })
+        } catch {
+            print("❌ Failed to load retrospectives: \(error)")
+            return [:]
+        }
+    }
+    
+    private func saveRetrospectivesMap(_ map: [Date: String]) {
+        do {
+            let items = map.map { DailyRetro(date: $0.key, content: $0.value) }
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = .prettyPrinted
+            encoder.dateEncodingStrategy = .iso8601
+            
+            let data = try encoder.encode(items)
+            try data.write(to: retrospectivesFile, options: .atomic)
+             print("💾 Saved retrospectives to: \(retrospectivesFile.path)")
+        } catch {
+            print("❌ Failed to save retrospectives: \(error)")
         }
     }
 

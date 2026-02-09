@@ -56,6 +56,13 @@ class StatsManager: ObservableObject {
         }
         saveSessions()
     }
+    
+    /// Retrieve all sessions for a specific date
+    func sessions(for date: Date) -> [TranscriptionSession] {
+        let calendar = Calendar.current
+        return sessions.filter { calendar.isDate($0.timestamp, inSameDayAs: date) }
+            .sorted { $0.timestamp < $1.timestamp } // Chronological order
+    }
 
     // MARK: - Transformation Management
 

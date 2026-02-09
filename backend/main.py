@@ -115,6 +115,24 @@ async def transcribe_audio(file: UploadFile = File(...), language: str = None):
         )
 
         transcribed_text = result["text"]
+
+        # Convert pinyin to Chinese characters if language is Chinese
+        if language == "zh" and transcribed_text:
+            try:
+                print(f"🔄 Converting pinyin to Chinese characters...")
+                # Use Ollama to convert pinyin to hanzi
+                pinyin_to_hanzi_prompt = """Convert this pinyin romanization to proper Chinese characters (simplified Chinese/hanzi).
+
+Return ONLY the Chinese characters, no explanations, no pinyin, no romanization."""
+
+                hanzi_result = await call_ollama(transcribed_text, pinyin_to_hanzi_prompt, max_retries=1)
+                if hanzi_result and hanzi_result.strip():
+                    transcribed_text = hanzi_result.strip()
+                    print(f"✅ Converted pinyin to Chinese characters: {transcribed_text}")
+            except Exception as e:
+                print(f"⚠️  Pinyin conversion failed, keeping original: {str(e)}")
+                # Fallback to original pinyin output
+
         segments = result.get("segments", [])
         speech_duration = None
         if segments:

@@ -97,7 +97,63 @@ class OllamaService {
 
     // MARK: - Ollama API Call
 
-    private func callOllama(model: String, prompt: String) async throws -> String {
+    // MARK: - Retrospective Analysis
+    
+    /// Generate a daily retrospective analysis from a list of sessions
+    func generateRetrospective(sessions: [TranscriptionSession]) async throws -> String {
+        guard !sessions.isEmpty else {
+            return "No voice memos found for this date."
+        }
+        
+        // Ensure we have a model
+        if defaultModel == nil {
+            defaultModel = await detectDefaultModel()
+        }
+        
+        guard let model = defaultModel else {
+            throw OllamaError.modelUnavailable
+        }
+        
+        // Format sessions for the prompt
+        let formattedSessions = sessions.map { session in
+            let time = session.timestamp.formatted(date: .omitted, time: .shortened)
+            let app = session.targetAppName ?? "Unknown App"
+            // Use sanitized text if available, otherwise original text
+            let content = session.sanitizedText ?? session.text
+            return "[\(app)] (\(time)): \(content)"
+        }.joined(separator: "\n\n")
+        
+        let prompt = """
+        You are a personal retrospective assistant. Analyze the following voice memos recorded throughout the day.
+        
+        Group your analysis by Application Context (e.g., Slack, Notes, Cursor).
+        
+        For each group:
+        1. Summarize the key themes or tasks.
+        2. Identify any action items or outstanding questions.
+        3. Provide a brief "Insight" or "Reflection" on the content.
+        
+        Finally, provide a "Daily Synthesis" summarizing the overall day.
+        
+        Format the output in Markdown.
+        
+        ---
+        VOICE MEMOS:
+        
+        \(formattedSessions)
+        """
+        
+        return try await callOllama(
+            model: model,
+            prompt: prompt,
+            temperature: 0.7, // Higher creativity for analysis
+            numPredict: 2000  // Allow longer response
+        )
+    }
+
+    // MARK: - Ollama API Call
+
+    private func callOllama(model: String, prompt: String, temperature: Double = 0.3, numPredict: Int = 50) async throws -> String {
         guard let url = URL(string: "\(baseURL)/api/generate") else {
             throw OllamaError.invalidURL
         }
@@ -105,15 +161,15 @@ class OllamaService {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 5.0 // 5 second timeout
+        request.timeoutInterval = 60.0 // Extended timeout for analysis
 
         let requestBody = GenerateRequest(
             model: model,
             prompt: prompt,
             stream: false,
             options: GenerateOptions(
-                temperature: 0.3, // More consistent
-                num_predict: 50   // Short responses
+                temperature: temperature,
+                num_predict: numPredict
             )
         )
 
@@ -157,6 +213,16 @@ struct GenerateRequest: Codable {
 struct GenerateOptions: Codable {
     let temperature: Double
     let num_predict: Int
+    
+    enum CodingKeys: String, CodingKey {
+        case temperature
+        case num_predict
+    }
+    
+    init(temperature: Double, num_predict: Int) {
+        self.temperature = temperature
+        self.num_predict = num_predict
+    }
 }
 
 struct GenerateResponse: Codable {
@@ -168,4 +234,5 @@ enum OllamaError: Error {
     case invalidURL
     case requestFailed
     case invalidResponse
+    case modelUnavailable
 }
