@@ -36,109 +36,60 @@ Press Ctrl+Space to dictate. Type normally everywhere else. Omoi counts it all a
 | **Accessibility** | Auto-paste transcriptions + keystroke monitoring |
 | **Input Monitoring** | CGEvent tap for keystroke counting + keyboard detection |
 
-## Installation Guide
+## Quick Start
 
-### Prerequisites
+### 1. Install prerequisites
 
-#### 1. Install Homebrew (if not already installed)
 ```bash
+# Homebrew (if you don't have it)
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-```
 
-#### 2. Install Required System Dependencies
-```bash
-# FFmpeg (required for Whisper audio processing)
-brew install ffmpeg
+# System dependencies
+brew install ffmpeg python@3.12 ollama
 
-# Python 3.12 (if not already installed)
-brew install python@3.12
-```
-
-#### 3. Install Ollama (Required for Text Transformation)
-```bash
-# Install Ollama
-brew install ollama
-
-# Start Ollama service
+# Start Ollama and pull a model for insights
 brew services start ollama
-
-# Download a small, fast model (recommended: qwen3:1.7b)
-ollama pull qwen3:1.7b
+ollama pull gemma3:4b
 ```
 
-**Note**: Ollama powers dashboard insights and text transformation. Transcription and keystroke tracking work without it, but the dashboard will show "Could not generate insights" and transformation features will be unavailable.
+### 2. Clone and set up backend
 
-### Backend Setup
+```bash
+git clone https://github.com/scurving/Wisprrd.git
+cd Wisprrd/backend
+python3.12 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/scurving/Wisprrd.git
-   cd Wisprrd/backend
-   ```
+The Whisper speech model (~460MB) downloads automatically on first transcription.
 
-2. **Create Python virtual environment:**
-   ```bash
-   python3.12 -m venv venv
-   source venv/bin/activate
-   ```
+### 3. Build and install the app
 
-3. **Install Python dependencies:**
-   ```bash
-   pip install --upgrade pip
-   pip install -r requirements.txt
-   ```
+```bash
+cd ../frontend/Omoi
+bash build_app.sh
+```
 
-4. **Download Whisper model (automatic on first run):**
-   ```bash
-   # The "small" model (~460MB) will download automatically on first transcription
-   # To pre-download: python -c "import whisper; whisper.load_model('small')"
-   ```
+This builds, code-signs, and installs to `/Applications/Omoi.app` in one step. It also launches the app when done.
 
-5. **Optional: Install TTS support:**
-   ```bash
-   # Only needed if you want text-to-speech features
-   pip install qwen-tts
-   ```
+### 4. Grant permissions (one time)
 
-### Frontend Setup
+On first launch, macOS will prompt for permissions. Grant all three:
 
-1. **Navigate to frontend directory:**
-   ```bash
-   cd ../frontend/Omoi
-   ```
+| Permission | Where | What it enables |
+|---|---|---|
+| **Accessibility** | System Settings → Privacy & Security → Accessibility | Auto-paste transcriptions |
+| **Input Monitoring** | System Settings → Privacy & Security → Input Monitoring | Keystroke counting + keyboard detection |
+| **Microphone** | Prompted automatically | Voice recording |
 
-2. **Build the application:**
-   ```bash
-   bash build_app.sh
-   ```
+After granting, restart the app once for all permissions to take effect.
 
-3. **The built app will be in:**
-   ```
-   frontend/Omoi/dist/Omoi.app
-   ```
+### 5. Use it
 
-4. **Move to Applications (optional):**
-   ```bash
-   cp -r dist/Omoi.app /Applications/
-   ```
-
-### First Launch
-
-1. **Grant Permissions:**
-   - **Accessibility**: System Settings → Privacy & Security → Accessibility → Enable Omoi
-   - **Microphone**: Will prompt automatically on first recording
-   - **Keyboard Monitoring**: Will prompt automatically when setting hotkey
-
-2. **Verify Backend:**
-   - Backend starts automatically with the app
-   - Check status in menu bar (should show "Backend Ready")
-   - If backend fails, check Console.app for Python errors
-
-3. **Test Recording:**
-   - Press **Ctrl + Space**
-   - Speak clearly
-   - Release keys
-   - Text should appear in active application
+- **Ctrl + Space** — start/stop voice recording (auto-pastes into your active app)
+- Typing is tracked automatically in the background
+- Open the app window to see your dashboard
 
 ## Daily Usage
 
