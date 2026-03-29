@@ -4,7 +4,7 @@ import ServiceManagement
 class LaunchAgentManager {
     static let shared = LaunchAgentManager()
 
-    private let launchAgentLabel = "com.wisprrd.omoi"
+    private let launchAgentLabel = "com.omoi.omoi"
     private var launchAgentURL: URL {
         let homeDir = FileManager.default.homeDirectoryForCurrentUser
         return homeDir.appendingPathComponent("Library/LaunchAgents/\(launchAgentLabel).plist")

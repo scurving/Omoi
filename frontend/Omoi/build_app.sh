@@ -92,7 +92,7 @@ fi
 # 4. Create/Process Info.plist
 # We need to manually replace variables since we aren't using Xcode
 sed -e "s/\$(EXECUTABLE_NAME)/$APP_NAME/" \
-    -e "s/\$(PRODUCT_BUNDLE_IDENTIFIER)/com.wisprrd.$APP_NAME/" \
+    -e "s/\$(PRODUCT_BUNDLE_IDENTIFIER)/com.omoi.$APP_NAME/" \
     -e "s/\$(PRODUCT_NAME)/$APP_NAME/" \
     -e "s/\$(MACOSX_DEPLOYMENT_TARGET)/14.0/" \
     "$SOURCE_PLIST" > "$APP_BUNDLE/Contents/Info.plist"

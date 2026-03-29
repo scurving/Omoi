@@ -55,8 +55,8 @@ ollama pull gemma3:4b
 ### 2. Clone and set up backend
 
 ```bash
-git clone https://github.com/scurving/Wisprrd.git
-cd Wisprrd/backend
+git clone https://github.com/scurving/Wisprrd.git Omoi
+cd Omoi/backend
 python3.12 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -114,7 +114,7 @@ After granting, restart the app once for all permissions to take effect.
 ## Project Structure
 
 ```
-Wisprrd/
+Omoi/
 ├── backend/                         # Python FastAPI backend
 │   ├── main.py                     # FastAPI server (STT, TTS, transformation)
 │   ├── requirements.txt            # Python dependencies

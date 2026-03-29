@@ -12,7 +12,7 @@ import os.log
 final class EncryptedStorageManager {
     static let shared = EncryptedStorageManager()
 
-    private let logger = Logger(subsystem: "com.wisprrd.Omoi", category: "EncryptedStorage")
+    private let logger = Logger(subsystem: "com.omoi.Omoi", category: "EncryptedStorage")
 
     // MARK: - File Paths
 
@@ -42,7 +42,7 @@ final class EncryptedStorageManager {
 
     // MARK: - Keychain Constants
 
-    private let keychainService = "com.wisprrd.Omoi.TypingKey"
+    private let keychainService = "com.omoi.Omoi.TypingKey"
     private let keychainAccount = "AES256Key"
 
     // MARK: - Init

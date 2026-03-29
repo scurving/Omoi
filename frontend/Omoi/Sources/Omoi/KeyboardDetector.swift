@@ -12,7 +12,7 @@ import os.log
 final class KeyboardDetector {
     static let shared = KeyboardDetector()
 
-    private let logger = Logger(subsystem: "com.wisprrd.Omoi", category: "KeyboardDetector")
+    private let logger = Logger(subsystem: "com.omoi.Omoi", category: "KeyboardDetector")
     private var hidManager: IOHIDManager?
     private var deviceMap: [Int64: KeyboardSource] = [:]  // (vendorID<<16 | productID) -> source
     private let queue = DispatchQueue(label: "com.omoi.keyboard-detector", qos: .utility)

@@ -19,7 +19,17 @@ class BackendManager: ObservableObject {
     private var healthCheckTimer: Timer?
     private let backendPort = 58724
     private let backendURL = URL(string: "http://127.0.0.1:58724")!
-    private let backendPath = "/Users/ptz/Projects/Wisprrd/backend"
+    private var backendPath: String {
+        // Look for backend relative to the app bundle, then fall back to common locations
+        let bundlePath = Bundle.main.bundlePath
+        let candidates = [
+            URL(fileURLWithPath: bundlePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("backend").path,
+            NSHomeDirectory() + "/Projects/Wisprrd/backend",
+            NSHomeDirectory() + "/Projects/Omoi/backend"
+        ]
+        return candidates.first { FileManager.default.fileExists(atPath: $0 + "/main.py") }
+            ?? candidates[0]
+    }
 
     private var failureCount = 0
     private let maxFailures = 6      // 30 seconds tolerance (health check every 5s)

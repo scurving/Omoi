@@ -119,7 +119,7 @@ struct StorageManager {
     }
 
     // UserDefaults keys for migration
-    private let userDefaultsDomains = ["Omoi", "com.wisprrd.Omoi"]
+    private let userDefaultsDomains = ["Omoi", "com.omoi.Omoi"]
     private let sessionsKey = "Omoi.Sessions"
 
     init() {
