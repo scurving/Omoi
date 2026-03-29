@@ -55,7 +55,7 @@ ollama pull gemma3:4b
 ### 2. Clone and set up backend
 
 ```bash
-git clone https://github.com/scurving/Wisprrd.git Omoi
+git clone https://github.com/scurving/Omoi.git
 cd Omoi/backend
 python3.12 -m venv venv
 source venv/bin/activate
