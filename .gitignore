@@ -9,7 +9,7 @@ build/
 dist/
 
 # Swift/Xcode
-frontend/SuperWhispr/.build/
+frontend/Omoi/.build/
 *.xcworkspace/
 xcuserdata/
 .swiftpm/
@@ -36,7 +36,7 @@ Research/
 docs/plans/
 docs/superpowers/
 .superpowers/
-frontend/SuperWhispr/docs/plans/
+frontend/Omoi/docs/plans/
 UI_REDESIGN_STRATEGY.md
 CONTRIBUTING.md
 **/thinking/

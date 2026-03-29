@@ -7,7 +7,7 @@ All notable changes to Omoi are documented here.
 ## [1.0.0] - 2026-02
 
 ### Brand
-- Renamed from SuperWhispr to **Omoi**
+- Renamed from Omoi to **Omoi**
 - New brutalist design system: sharp edges, flat colors, monospace typography
 - Responsive window layout
 

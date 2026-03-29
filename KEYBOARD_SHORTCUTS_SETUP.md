@@ -85,7 +85,7 @@ extension KeyboardShortcuts.Name {
 
 After editing, rebuild the app:
 ```bash
-cd frontend/SuperWhispr
+cd frontend/Omoi
 bash build_app.sh
 ```
 

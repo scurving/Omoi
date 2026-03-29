@@ -117,7 +117,7 @@ Press `Ctrl+C` to stop the test server (the app will auto-start it later).
 ### 3.1 Build via Script (Recommended)
 
 ```bash
-cd ../frontend/SuperWhispr
+cd ../frontend/Omoi
 bash build_app.sh
 ```
 
@@ -143,8 +143,8 @@ If you prefer to use Xcode:
 
 1. Open **Xcode**
 2. Go to **File > Open...**
-3. Navigate to the cloned repo: `frontend/SuperWhispr`
-4. Select the **SuperWhispr** folder (with `Package.swift`)
+3. Navigate to the cloned repo: `frontend/Omoi`
+4. Select the **Omoi** folder (with `Package.swift`)
 5. Click **Open**
 6. Wait for dependencies to resolve (progress bar in top toolbar)
 7. Press **⌘ + B** to build

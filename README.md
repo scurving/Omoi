@@ -104,7 +104,7 @@ ollama pull qwen3:1.7b
 
 1. **Navigate to frontend directory:**
    ```bash
-   cd ../frontend/SuperWhispr
+   cd ../frontend/Omoi
    ```
 
 2. **Build the application:**
@@ -114,7 +114,7 @@ ollama pull qwen3:1.7b
 
 3. **The built app will be in:**
    ```
-   frontend/SuperWhispr/dist/Omoi.app
+   frontend/Omoi/dist/Omoi.app
    ```
 
 4. **Move to Applications (optional):**
@@ -168,7 +168,7 @@ Wisprrd/
 │   ├── main.py                     # FastAPI server (STT, TTS, transformation)
 │   ├── requirements.txt            # Python dependencies
 │   └── venv/                       # Virtual environment (created during setup)
-├── frontend/SuperWhispr/           # macOS SwiftUI application
+├── frontend/Omoi/           # macOS SwiftUI application
 │   ├── Sources/Omoi/               # Swift source files
 │   │   ├── OmoiApp.swift          # Main app entry + keyboard shortcut
 │   │   ├── KeystrokeMonitor.swift # CGEvent tap keystroke counting
@@ -450,7 +450,7 @@ ollama list
 
 2. **Frontend**:
    ```bash
-   cd frontend/SuperWhispr
+   cd frontend/Omoi
    open -a Xcode .
    # Build and run from Xcode
    ```
@@ -458,7 +458,7 @@ ollama list
 ### Build from Source
 
 ```bash
-cd frontend/SuperWhispr
+cd frontend/Omoi
 bash build_app.sh
 # App will be in dist/Omoi.app
 ```

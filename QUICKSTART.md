@@ -42,7 +42,7 @@ pip install -r requirements.txt
 ## 3. Build App (2 minutes)
 
 ```bash
-cd ../frontend/SuperWhispr
+cd ../frontend/Omoi
 bash build_app.sh
 ```
 
