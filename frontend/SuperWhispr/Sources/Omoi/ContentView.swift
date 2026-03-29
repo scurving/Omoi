@@ -37,7 +37,7 @@ struct ContentView: View {
                 case 2:
                     HistoryView(statsManager: viewModel.stats)
                 case 3:
-                    RetroView(statsManager: viewModel.stats)
+                    RetroView(statsManager: viewModel.stats, selectedTab: $selectedTab)
                 case 4:
                     PipelinesView(statsManager: viewModel.stats)
                 default:

@@ -2,14 +2,14 @@ import SwiftUI
 
 struct RetroView: View {
     @ObservedObject var statsManager: StatsManager
-    
+    @Binding var selectedTab: Int
+
     @State private var selectedDate = Date()
     @State private var analysisText: String = ""
     @State private var isGenerating = false
     @State private var errorMessage: String?
     @State private var showSaveSuccess = false
     @State private var showPipelineConfig = false
-    @State private var showingPipelines = false
     
     var body: some View {
         VStack(spacing: 0) {
@@ -110,7 +110,7 @@ struct RetroView: View {
                             }
                     }
                     
-                    Button(action: { showingPipelines = true }) {
+                    Button(action: { selectedTab = 4 }) {
                         HStack(spacing: 4) {
                             Image(systemName: "slider.horizontal.3")
                             Text("PROMPT")
@@ -156,10 +156,6 @@ struct RetroView: View {
         }
         .onAppear {
             loadSavedAnalysis(for: selectedDate)
-        }
-        .sheet(isPresented: $showingPipelines) {
-            PipelinesView(statsManager: statsManager)
-                .frame(minWidth: 500, minHeight: 400)
         }
         .sheet(isPresented: $showPipelineConfig) {
             VStack(spacing: 0) {
