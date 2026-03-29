@@ -26,25 +26,25 @@ class StatsManager: ObservableObject {
             self?.objectWillChange.send()
         }
     }
-    
+
     // MARK: - Persistence
-    
+
     // Using StorageManager (JSON in Documents) instead of UserDefaults
     private let storage = StorageManager.shared
-    
+
     func saveSessions() {
         storage.saveSessions(sessions)
     }
-    
+
     private func loadSessions() {
         sessions = storage.loadSessions()
     }
-    
+
     func addSession(_ session: TranscriptionSession) {
         sessions.insert(session, at: 0)
         saveSessions()
     }
-    
+
     func clearHistory() {
         sessions.removeAll()
         saveSessions()
@@ -65,20 +65,20 @@ class StatsManager: ObservableObject {
         }
         saveSessions()
     }
-    
+
     /// Retrieve all sessions for a specific date
     func sessions(for date: Date) -> [TranscriptionSession] {
         let calendar = Calendar.current
         return sessions.filter { calendar.isDate($0.timestamp, inSameDayAs: date) }
-            .sorted { $0.timestamp < $1.timestamp } // Chronological order
+            .sorted { $0.timestamp < $1.timestamp }
     }
-    
+
     // MARK: - Retrospectives Persistence
-    
+
     func saveRetrospective(_ text: String, for date: Date) {
         StorageManager.shared.saveRetrospective(text, for: date)
     }
-    
+
     func loadRetrospective(for date: Date) -> String? {
         return StorageManager.shared.loadRetrospective(for: date)
     }
@@ -156,7 +156,7 @@ class StatsManager: ObservableObject {
         return (current: current, percentage: min(percentage, 1.5)) // Cap at 150% for display
     }
 
-    private func todayWords() -> Int {
+    func todayWords() -> Int {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
         return sessions.filter { calendar.isDate($0.timestamp, inSameDayAs: today) }
@@ -184,6 +184,8 @@ class StatsManager: ObservableObject {
             .reduce(0) { $0 + $1.wordCount }
     }
 
+    // MARK: - Tag Management
+
     func addTag(_ tag: String, to sessionID: UUID) {
         if let index = sessions.firstIndex(where: { $0.id == sessionID }) {
             var updated = sessions[index]
@@ -209,100 +211,14 @@ class StatsManager: ObservableObject {
         return Array(tagSet).sorted()
     }
 
-    // MARK: - Tag Suggestions
-
-    /// Generate tag suggestions using LLM (async)
-    func suggestTagsWithLLM(for session: TranscriptionSession) async -> [String] {
-        let llmSuggestions = await OllamaService.shared.generateTags(
-            for: session.text,
-            app: session.targetAppName,
-            existingTags: allTags,
-            sessionID: session.id
-        )
-
-        // Filter out tags already on session
-        return llmSuggestions.filter { !session.tags.contains($0) }
-    }
-
-    /// Fallback: Static keyword-based tag suggestions (when LLM unavailable)
-    func suggestTagsFallback(for session: TranscriptionSession) -> [String] {
-        var suggestions: [String] = []
-        let text = session.text.lowercased()
-
-        // App-based suggestions
-        if let app = session.targetAppName?.lowercased() {
-            if ["slack", "teams", "zoom", "discord"].contains(app) {
-                suggestions.append("meeting")
-            }
-            if ["mail", "outlook"].contains(app) {
-                suggestions.append("email")
-            }
-            if ["notes", "bear", "notion"].contains(app) {
-                suggestions.append("draft")
-            }
-        }
-
-        // Content-based keyword matching
-        let workKeywords = ["meeting", "project", "deadline", "client", "team", "schedule", "task"]
-        let personalKeywords = ["remind me", "groceries", "appointment", "personal", "family"]
-        let ideaKeywords = ["idea", "think about", "maybe we could", "what if"]
-
-        if workKeywords.contains(where: { text.contains($0) }) {
-            suggestions.append("work")
-        }
-        if personalKeywords.contains(where: { text.contains($0) }) {
-            suggestions.append("personal")
-        }
-        if ideaKeywords.contains(where: { text.contains($0) }) {
-            suggestions.append("idea")
-        }
-
-        // Question detection
-        if text.contains("?") {
-            suggestions.append("question")
-        }
-
-        // Action items
-        if text.contains("todo") || text.contains("to do") || text.contains("need to") {
-            suggestions.append("action")
-        }
-
-        // Important markers
-        if text.contains("important") || text.contains("urgent") || text.contains("asap") {
-            suggestions.append("important")
-        }
-
-        // Remove duplicates and existing tags
-        return Array(Set(suggestions)).filter { !session.tags.contains($0) }
-    }
-
-    private func timeOfDayLabel(for hour: Int) -> String {
-        switch hour {
-        case 5..<12: return "morning"
-        case 12..<17: return "afternoon"
-        case 17..<21: return "evening"
-        default: return "late night"
-        }
-    }
-
-    private func calculateVariance(_ values: [Double]) -> Double {
-        guard !values.isEmpty else { return 0 }
-        let mean = values.reduce(0, +) / Double(values.count)
-        guard mean != 0 else { return 0 }
-        let squaredDiffs = values.map { pow($0 - mean, 2) }
-        let variance = squaredDiffs.reduce(0, +) / Double(values.count)
-        let result = variance / (mean * mean) // coefficient of variation
-        return result.isFinite ? result : 0
-    }
-
     // MARK: - Computed Metrics
 
     var totalWords: Int {
         sessions.reduce(0) { $0 + $1.wordCount }
     }
-    
+
     var averageWPM: Double {
-        let validSessions = sessions.filter { $0.effectiveDuration > 0.1 }  // At least 0.1 seconds
+        let validSessions = sessions.filter { $0.effectiveDuration > 0.1 }
         guard !validSessions.isEmpty else { return 0 }
         let totalWPM = validSessions.reduce(0.0) { sum, session in
             let wpm = Double(session.wordCount) / (session.effectiveDuration / 60.0)
@@ -310,118 +226,6 @@ class StatsManager: ObservableObject {
         }
         let result = totalWPM / Double(validSessions.count)
         return result.isFinite ? result : 0
-    }
-    
-    var currentStreak: Int {
-        guard !sessions.isEmpty else { return 0 }
-        
-        let calendar = Calendar.current
-        var streak = 0
-        var checkDate = calendar.startOfDay(for: Date())
-        
-        // Check if today has any sessions
-        let todaySessions = sessions.filter { calendar.isDate($0.timestamp, inSameDayAs: Date()) }
-        if todaySessions.isEmpty {
-            // If no sessions today, start checking from yesterday
-            checkDate = calendar.date(byAdding: .day, value: -1, to: checkDate) ?? checkDate
-        }
-        
-        // Count consecutive days with sessions
-        while true {
-            let daySessions = sessions.filter { calendar.isDate($0.timestamp, inSameDayAs: checkDate) }
-            if daySessions.isEmpty {
-                break
-            }
-            streak += 1
-            guard let previousDay = calendar.date(byAdding: .day, value: -1, to: checkDate) else { break }
-            checkDate = previousDay
-        }
-        
-        return streak
-    }
-    
-    var topApps: [(name: String, count: Int)] {
-        let appCounts = Dictionary(grouping: sessions.compactMap { $0.targetAppName }, by: { $0 })
-            .mapValues { $0.count }
-            .sorted { $0.value > $1.value }
-            .prefix(5)
-        
-        return appCounts.map { (name: $0.key, count: $0.value) }
-    }
-    
-    var wordsPerDay: [(date: Date, words: Int)] {
-        let calendar = Calendar.current
-        let grouped = Dictionary(grouping: sessions) { session in
-            calendar.startOfDay(for: session.timestamp)
-        }
-
-        return grouped.map { (date: $0.key, words: $0.value.reduce(0) { $0 + $1.wordCount }) }
-            .sorted { $0.date > $1.date }
-            .prefix(7)
-            .reversed()
-            .map { $0 }
-    }
-
-    var wpmPerDay: [(date: Date, wpm: Double)] {
-        let calendar = Calendar.current
-        let grouped = Dictionary(grouping: sessions) { session in
-            calendar.startOfDay(for: session.timestamp)
-        }
-
-        return grouped.compactMap { (date, sessions) -> (date: Date, wpm: Double)? in
-            let validSessions = sessions.filter { $0.effectiveDuration > 0.1 }
-            guard !validSessions.isEmpty else { return nil }
-
-            let totalWPM = validSessions.reduce(0.0) { sum, session in
-                let wpm = Double(session.wordCount) / (session.effectiveDuration / 60.0)
-                return sum + (wpm.isFinite ? wpm : 0)
-            }
-            let avgWPM = totalWPM / Double(validSessions.count)
-
-            return avgWPM.isFinite ? (date: date, wpm: avgWPM) : nil
-        }
-        .sorted { $0.date > $1.date }
-        .prefix(7)
-        .reversed()
-        .map { $0 }
-    }
-
-    var peakProductivityHour: (hour: Int, words: Int)? {
-        guard !sessions.isEmpty else { return nil }
-
-        let calendar = Calendar.current
-        let hourGroups = Dictionary(grouping: sessions) { session in
-            calendar.component(.hour, from: session.timestamp)
-        }
-
-        let hourTotals = hourGroups.mapValues { sessions in
-            sessions.reduce(0) { $0 + $1.wordCount }
-        }
-
-        guard let peak = hourTotals.max(by: { $0.value < $1.value }) else {
-            return nil
-        }
-
-        return (hour: peak.key, words: peak.value)
-    }
-
-    var wpmByApp: [(appName: String, avgWPM: Double, sessionCount: Int)] {
-        let appGroups = Dictionary(grouping: sessions.filter { $0.targetAppName != nil && $0.effectiveDuration > 0.1 }) { session in
-            session.targetAppName!
-        }
-
-        return appGroups.compactMap { (appName, sessions) -> (appName: String, avgWPM: Double, sessionCount: Int)? in
-            guard !sessions.isEmpty else { return nil }
-
-            let totalWPM = sessions.reduce(0.0) { sum, session in
-                let wpm = Double(session.wordCount) / (session.effectiveDuration / 60.0)
-                return sum + (wpm.isFinite ? wpm : 0)
-            }
-            let avgWPM = totalWPM / Double(sessions.count)
-
-            return avgWPM.isFinite ? (appName: appName, avgWPM: avgWPM, sessionCount: sessions.count) : nil
-        }
-        .sorted { $0.avgWPM > $1.avgWPM }
     }
 
     var statsByApp: [(appName: String, totalWords: Int, avgWPM: Double, sessionCount: Int)] {
@@ -449,392 +253,5 @@ class StatsManager: ObservableObject {
             return (appName: appName, totalWords: totalWords, avgWPM: avgWPM.isFinite ? avgWPM : 0, sessionCount: sessions.count)
         }
         .sorted { $0.totalWords > $1.totalWords }
-    }
-
-    // Week-over-week comparison data
-    var weekOverWeekComparison: [(day: String, thisWeek: Int, lastWeek: Int)] {
-        let calendar = Calendar.current
-        let now = Date()
-
-        // Get last 7 days (this week)
-        let thisWeekDates = (0..<7).compactMap { offset -> Date? in
-            calendar.date(byAdding: .day, value: -offset, to: now)
-        }.reversed()
-
-        return thisWeekDates.map { date in
-            let thisWeekWords = sessions.filter { session in
-                calendar.isDate(session.timestamp, inSameDayAs: date)
-            }.reduce(0) { $0 + $1.wordCount }
-
-            // Get corresponding day from last week
-            guard let lastWeekDate = calendar.date(byAdding: .day, value: -7, to: date) else {
-                return (day: dayOfWeek(date), thisWeek: thisWeekWords, lastWeek: 0)
-            }
-
-            let lastWeekWords = sessions.filter { session in
-                calendar.isDate(session.timestamp, inSameDayAs: lastWeekDate)
-            }.reduce(0) { $0 + $1.wordCount }
-
-            return (day: dayOfWeek(date), thisWeek: thisWeekWords, lastWeek: lastWeekWords)
-        }
-    }
-
-    private func dayOfWeek(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEE"
-        return formatter.string(from: date)
-    }
-
-    // Moving averages for trend visualization
-    var wordsMovingAverage: [(date: Date, average: Double)] {
-        let data = wordsPerDay
-        guard data.count >= 3 else { return [] }
-
-        return data.enumerated().compactMap { index, item in
-            let windowStart = max(0, index - 3)
-            let windowEnd = min(data.count - 1, index + 3)
-            let window = data[windowStart...windowEnd]
-
-            let average = Double(window.reduce(0) { $0 + $1.words }) / Double(window.count)
-            return (date: item.date, average: average)
-        }
-    }
-
-    var wpmMovingAverage: [(date: Date, average: Double)] {
-        let data = wpmPerDay
-        guard data.count >= 3 else { return [] }
-
-        return data.enumerated().compactMap { index, item in
-            let windowStart = max(0, index - 3)
-            let windowEnd = min(data.count - 1, index + 3)
-            let window = data[windowStart...windowEnd]
-
-            let average = window.reduce(0.0) { $0 + $1.wpm } / Double(window.count)
-            return (date: item.date, average: average)
-        }
-    }
-
-    // MARK: - Typing Stats (from EncryptedStorageManager)
-
-    /// Reference to the typing storage for aggregated stats
-    private var typingStorage: TypingStorage {
-        EncryptedStorageManager.shared.typingStorage
-    }
-
-    /// Typed words per day for the last 7 days (estimated from keystrokes)
-    var typedWordsPerDay: [(date: Date, words: Int)] {
-        typingStorage.dailyTypedWords(lastDays: 7)
-    }
-
-    /// Typed WPM per day for the last 7 days
-    var typedWpmPerDay: [(date: Date, wpm: Double)] {
-        let calendar = Calendar.current
-        let now = Date()
-        var result: [Date: (words: Int, duration: TimeInterval)] = [:]
-
-        for i in 0..<7 {
-            guard let day = calendar.date(byAdding: .day, value: -i, to: now) else { continue }
-            result[calendar.startOfDay(for: day)] = (0, 0)
-        }
-
-        let sessions = typingStorage.sessions
-        for session in sessions {
-            let dayStart = calendar.startOfDay(for: session.timestamp)
-            if var existing = result[dayStart] {
-                existing.words += session.wordCount
-                existing.duration += session.duration
-                result[dayStart] = existing
-            }
-        }
-
-        return result.compactMap { date, data -> (date: Date, wpm: Double)? in
-            guard data.duration > 0.1 else { return nil }
-            let wpm = Double(data.words) / (data.duration / 60.0)
-            return wpm.isFinite ? (date: date, wpm: wpm) : nil
-        }.sorted { $0.date < $1.date }
-    }
-
-    /// Average WPM per keyboard source (built-in, NuPhy, external)
-    var wpmByKeyboard: [(keyboard: KeyboardSource, avgWpm: Double)] {
-        let byKeyboard = typingStorage.wpmByKeyboard()
-        return byKeyboard.map { (keyboard: $0.key, avgWpm: $0.value) }
-            .sorted { $0.avgWpm > $1.avgWpm }
-    }
-
-    /// Per-app typing stats (total typed words and avg WPM per app)
-    var typingByApp: [(appName: String, keystrokes: Int, estimatedWords: Int, avgWpm: Double)] {
-        let calendar = Calendar.current
-        let sessions = typingStorage.sessions
-
-        let grouped = Dictionary(grouping: sessions) { $0.appName }
-        return grouped.compactMap { appName, sessions -> (appName: String, keystrokes: Int, estimatedWords: Int, avgWpm: Double)? in
-            let totalKeys   = sessions.reduce(0) { $0 + $1.keystrokeCount }
-            let totalWords  = sessions.reduce(0) { $0 + $1.wordCount }
-            let totalDuration = sessions.reduce(0.0) { $0 + $1.duration }
-            guard totalDuration > 0.1 else { return nil }
-            let avgWpm = Double(totalWords) / (totalDuration / 60.0)
-            return (appName: appName, keystrokes: totalKeys, estimatedWords: totalWords, avgWpm: avgWpm.isFinite ? avgWpm : 0)
-        }.sorted { $0.estimatedWords > $1.estimatedWords }
-    }
-
-    /// Daily input mode ratio: (voice words, typed words) as percentages
-    var inputModeRatio: [(date: Date, voicePercent: Double, typedPercent: Double)] {
-        let calendar = Calendar.current
-        let now = Date()
-        var result: [Date: (voice: Int, typed: Int)] = [:]
-
-        for i in 0..<7 {
-            guard let day = calendar.date(byAdding: .day, value: -i, to: now) else { continue }
-            result[calendar.startOfDay(for: day)] = (0, 0)
-        }
-
-        // Voice words
-        for session in sessions {
-            let dayStart = calendar.startOfDay(for: session.timestamp)
-            if var existing = result[dayStart] {
-                existing.voice += session.wordCount
-                result[dayStart] = existing
-            }
-        }
-
-        // Typed words
-        let typedDaily = typingStorage.dailyTypedWords(lastDays: 7)
-        for entry in typedDaily {
-            if var existing = result[entry.date] {
-                existing.typed = entry.words
-                result[entry.date] = existing
-            }
-        }
-
-        return result.map { date, data -> (date: Date, voicePercent: Double, typedPercent: Double) in
-            let total = data.voice + data.typed
-            if total == 0 {
-                return (date: date, voicePercent: 0, typedPercent: 0)
-            }
-            return (date: date,
-                    voicePercent: Double(data.voice) / Double(total) * 100,
-                    typedPercent: Double(data.typed) / Double(total) * 100)
-        }.sorted { $0.date < $1.date }
-    }
-
-    /// Combined words per day (voice + typed) for stacked charts
-    var combinedWordsPerDay: [(date: Date, voiceWords: Int, typedWords: Int)] {
-        let calendar = Calendar.current
-        let now = Date()
-        var result: [Date: (voice: Int, typed: Int)] = [:]
-
-        for i in 0..<7 {
-            guard let day = calendar.date(byAdding: .day, value: -i, to: now) else { continue }
-            result[calendar.startOfDay(for: day)] = (0, 0)
-        }
-
-        for session in sessions {
-            let dayStart = calendar.startOfDay(for: session.timestamp)
-            if var existing = result[dayStart] {
-                existing.voice += session.wordCount
-                result[dayStart] = existing
-            }
-        }
-
-        for entry in typedWordsPerDay {
-            if var existing = result[entry.date] {
-                existing.typed = entry.words
-                result[entry.date] = existing
-            }
-        }
-
-        return result
-            .map { (date: $0.key, voiceWords: $0.value.voice, typedWords: $0.value.typed) }
-            .sorted { $0.date < $1.date }
-    }
-
-    /// Combined WPM trend per day: voice WPM + typed WPM (by keyboard)
-    var combinedWpmTrend: [(date: Date, voiceWpm: Double, typedBuiltinWpm: Double, typedNuphyWpm: Double)] {
-        let calendar = Calendar.current
-        let now = Date()
-        var result: [Date: (voice: (words: Int, duration: TimeInterval), builtin: (words: Int, duration: TimeInterval), nuphy: (words: Int, duration: TimeInterval))] = [:]
-
-        for i in 0..<30 {
-            guard let day = calendar.date(byAdding: .day, value: -i, to: now) else { continue }
-            result[calendar.startOfDay(for: day)] = (
-                voice: (0, 0),
-                builtin: (0, 0),
-                nuphy: (0, 0)
-            )
-        }
-
-        // Voice sessions
-        for session in sessions {
-            let dayStart = calendar.startOfDay(for: session.timestamp)
-            if var existing = result[dayStart] {
-                existing.voice.words += session.wordCount
-                existing.voice.duration += session.effectiveDuration
-                result[dayStart] = existing
-            }
-        }
-
-        // Typing sessions
-        for session in typingStorage.sessions {
-            let dayStart = calendar.startOfDay(for: session.timestamp)
-            if var existing = result[dayStart] {
-                switch session.keyboard {
-                case .builtin:
-                    existing.builtin.words += session.wordCount
-                    existing.builtin.duration += session.duration
-                case .nuphy:
-                    existing.nuphy.words += session.wordCount
-                    existing.nuphy.duration += session.duration
-                case .external:
-                    // External treated same as builtin for chart purposes
-                    existing.builtin.words += session.wordCount
-                    existing.builtin.duration += session.duration
-                }
-                result[dayStart] = existing
-            }
-        }
-
-        return result.compactMap { date, data -> (date: Date, voiceWpm: Double, typedBuiltinWpm: Double, typedNuphyWpm: Double)? in
-            let voiceWpm     = data.voice.duration > 0.1 ?     Double(data.voice.words)     / (data.voice.duration / 60.0)     : 0
-            let builtinWpm  = data.builtin.duration > 0.1 ?  Double(data.builtin.words)  / (data.builtin.duration / 60.0)  : 0
-            let nuphyWpm    = data.nuphy.duration > 0.1 ?     Double(data.nuphy.words)    / (data.nuphy.duration / 60.0)    : 0
-            return (date: date,
-                    voiceWpm: voiceWpm.isFinite ? voiceWpm : 0,
-                    typedBuiltinWpm: builtinWpm.isFinite ? builtinWpm : 0,
-                    typedNuphyWpm: nuphyWpm.isFinite ? nuphyWpm : 0)
-        }.sorted { $0.date < $1.date }
-    }
-
-    /// Today's typed word count
-    var todayTypedWords: Int {
-        typingStorage.todayTypedWords
-    }
-
-    /// Average typed WPM across all typing sessions
-    var averageTypedWpm: Double {
-        typingStorage.averageTypedWpm
-    }
-
-    /// All typing sessions for the unified timeline
-    var typingSessions: [TypingSession] {
-        typingStorage.sessions
-    }
-
-    /// Combined total words today (voice + typed)
-    var totalWordsToday: Int {
-        todayWords() + todayTypedWords
-    }
-
-    /// Combined average WPM today (voice + typed, weighted)
-    var combinedAverageWpmToday: Double {
-        let validVoice = sessions.filter { $0.effectiveDuration > 0.1 }
-        let totalVoiceWords = validVoice.reduce(0) { $0 + $1.wordCount }
-        let totalVoiceDuration = validVoice.reduce(0.0) { $0 + $1.effectiveDuration }
-        let voiceWpm = totalVoiceDuration > 0 ? Double(totalVoiceWords) / (totalVoiceDuration / 60.0) : 0
-
-        // Typed WPM today
-        let typedToday = typingStorage.sessions.filter {
-            Calendar.current.isDate($0.timestamp, inSameDayAs: Date())
-        }
-        let totalTypedWords = typedToday.reduce(0) { $0 + $1.wordCount }
-        let totalTypedDuration = typedToday.reduce(0.0) { $0 + $1.duration }
-        let typedWpm = totalTypedDuration > 0 ? Double(totalTypedWords) / (totalTypedDuration / 60.0) : 0
-
-        // Combined weighted average
-        let totalWords = totalVoiceWords + totalTypedWords
-        guard totalWords > 0 else { return 0 }
-        let combined = (voiceWpm * Double(totalVoiceWords) + typedWpm * Double(totalTypedWords)) / Double(totalWords)
-        return combined.isFinite ? combined : 0
-    }
-
-    // MARK: - Performance Insights (typing-enhanced)
-
-    var performanceInsights: [PerformanceInsight] {
-        var insights: [PerformanceInsight] = []
-
-        // Peak hour insight
-        if let peak = peakProductivityHour {
-            let timeOfDay = timeOfDayLabel(for: peak.hour)
-            insights.append(PerformanceInsight(
-                icon: "clock.fill",
-                title: "Peak Time",
-                message: "You capture most words in the \(timeOfDay). Schedule important work then.",
-                type: .timing
-            ))
-        }
-
-        // Fastest app insight (voice)
-        if let fastestApp = wpmByApp.first, wpmByApp.count >= 2 {
-            let slowestApp = wpmByApp.last!
-            if slowestApp.avgWPM > 0 {
-                let diffValue = ((fastestApp.avgWPM - slowestApp.avgWPM) / slowestApp.avgWPM) * 100
-                let diff = diffValue.isFinite ? Int(diffValue) : 0
-                insights.append(PerformanceInsight(
-                    icon: "speedometer",
-                    title: "Context Matters",
-                    message: "You speak \(diff)% faster in \(fastestApp.appName) than \(slowestApp.appName).",
-                    type: .speed
-                ))
-            }
-        }
-
-        // Keyboard comparison insight (typed)
-        if wpmByKeyboard.count >= 2 {
-            let sorted = wpmByKeyboard.sorted { $0.avgWpm > $1.avgWpm }
-            if let fastest = sorted.first, let slowest = sorted.last, slowest.avgWpm > 0 {
-                let diff = ((fastest.avgWpm - slowest.avgWpm) / slowest.avgWpm) * 100
-                if diff.isFinite && abs(diff) > 10 {
-                    insights.append(PerformanceInsight(
-                        icon: "keyboard.fill",
-                        title: "Keyboard Comparison",
-                        message: "You type \(Int(abs(diff)))% \(diff > 0 ? "faster" : "slower") on \(fastest.keyboard.displayName) than \(slowest.keyboard.displayName).",
-                        type: .speed
-                    ))
-                }
-            }
-        }
-
-        // Mode ratio insight
-        if let todayRatio = inputModeRatio.last, (todayRatio.voicePercent + todayRatio.typedPercent) > 0 {
-            let dominant = todayRatio.voicePercent > todayRatio.typedPercent ? "voice" : "typed"
-            let dominantPercent = max(todayRatio.voicePercent, todayRatio.typedPercent)
-            if dominantPercent > 60 {
-                insights.append(PerformanceInsight(
-                    icon: "arrow.left.arrow.right",
-                    title: "Mode Shift",
-                    message: "Today was \(Int(dominantPercent))% \(dominant). Your input mix varies day to day.",
-                    type: .habit
-                ))
-            }
-        }
-
-        // Consistency insight
-        let recentWeek = weekOverWeekComparison
-        if !recentWeek.isEmpty {
-            let variance = calculateVariance(recentWeek.map { Double($0.thisWeek) })
-            if variance < 0.2 {
-                insights.append(PerformanceInsight(
-                    icon: "chart.line.flattrend.xyaxis",
-                    title: "Consistent Rhythm",
-                    message: "Your daily word count is very consistent. Great habit formation!",
-                    type: .habit
-                ))
-            }
-        }
-
-        return insights
-    }
-}
-
-// MARK: - Performance Insight Model
-
-struct PerformanceInsight: Identifiable {
-    let id = UUID()
-    let icon: String
-    let title: String
-    let message: String
-    let type: InsightType
-
-    enum InsightType {
-        case timing, speed, habit, milestone
     }
 }

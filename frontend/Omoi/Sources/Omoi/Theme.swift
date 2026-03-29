@@ -214,29 +214,3 @@ enum AppIcons {
     }
 }
 
-// MARK: - Legacy compatibility (to be removed)
-// Keeping flowGradientBackground temporarily for transition
-extension Color {
-    static let flowPurple = omoiTeal
-    static let flowBlue = omoiTeal
-    static let flowPink = omoiOrange
-
-    static let flowGradient = LinearGradient(
-        colors: [omoiDarkGray, omoiBlack],
-        startPoint: .top,
-        endPoint: .bottom
-    )
-}
-
-struct FlowGradientBackground: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .background(Color.omoiBlack.ignoresSafeArea())
-    }
-}
-
-extension View {
-    func flowGradientBackground() -> some View {
-        modifier(FlowGradientBackground())
-    }
-}

@@ -642,8 +642,8 @@ struct DashboardView: View {
         switch index {
         case 0: return Color.yellow
         case 1: return Color.orange
-        case 2: return Color.flowPurple
-        default: return Color.flowBlue
+        case 2: return Color.omoiPurple
+        default: return Color.omoiTeal
         }
     }
 
