@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# SuperWhispr Backend Setup Script
+# Omoi Backend Setup Script
 
-echo "🎙️  Setting up SuperWhispr Backend..."
+echo "🎙️  Setting up Omoi Backend..."
 
 # Check if python3 is available
 if ! command -v python3 &> /dev/null; then

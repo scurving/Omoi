@@ -287,7 +287,7 @@ struct SettingsView: View {
             isPresented: $showingExportPanel,
             document: HistoryDocument(),
             contentType: .json,
-            defaultFilename: "superwhispr_history_\(Date().formatted(date: .numeric, time: .omitted)).json"
+            defaultFilename: "omoi_history_\(Date().formatted(date: .numeric, time: .omitted)).json"
         ) { result in
             switch result {
             case .success(let url):
