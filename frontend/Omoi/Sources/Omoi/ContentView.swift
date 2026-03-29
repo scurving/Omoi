@@ -129,7 +129,6 @@ struct ContentView: View {
 
 struct RecordView: View {
     @ObservedObject var viewModel: ContentViewModel
-    @Environment(\.openWindow) private var openWindow
     @State private var audioLevel: CGFloat = 0.0
     @State private var recordingDuration: TimeInterval = 0
     @State private var processingTimer: Timer?
@@ -227,12 +226,6 @@ struct RecordView: View {
                             .padding(.vertical, 4)
                             .background(Color.omoiGray)
                             .foregroundStyle(Color.omoiTeal)
-                        Button("CHANGE") {
-                            openWindow(id: "settings")
-                        }
-                        .font(OmoiFont.label(size: 10))
-                        .foregroundStyle(Color.omoiMuted)
-                        .buttonStyle(.plain)
                         Spacer()
                     }
 

@@ -29,13 +29,6 @@ struct OmoiApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        // Settings window for keyboard shortcuts
-        WindowGroup(id: "settings") {
-            SettingsView()
-                .frame(minWidth: 500, idealWidth: 600, minHeight: 400, idealHeight: 500)
-        }
-        .windowStyle(.hiddenTitleBar)
-        .defaultPosition(.center)
     }
 }
 

@@ -1,4 +1,6 @@
 import SwiftUI
+import KeyboardShortcuts
+import UniformTypeIdentifiers
 
 struct PipelinesView: View {
     @State private var sanitizationManager = SanitizationManager.shared
@@ -15,6 +17,20 @@ struct PipelinesView: View {
     @State private var showSavePresetSheet = false
     @State private var newPresetName = ""
     
+    // Settings state
+    @State private var shortcutDescription: String = ""
+    @State private var backups: [StorageManager.BackupInfo] = []
+    @State private var historyInfo: (sessionCount: Int, fileSize: Int64, lastModified: Date?)? = nil
+    @State private var showingExportPanel = false
+    @State private var showingImportPanel = false
+    @State private var showingRestoreAlert = false
+    @State private var selectedBackup: StorageManager.BackupInfo? = nil
+    @State private var settingsStatusMessage: String? = nil
+    @State private var integrityStatus: String = "Checking..."
+    @State private var showingDeleteRecordingsAlert = false
+    @AppStorage("saveRecordingsForPlayback") private var saveRecordingsForPlayback = true
+    @AppStorage("transcriptionLanguage") private var transcriptionLanguage = "auto"
+
     // UI State
     @State private var expandedSection: PipelineSection? = .input // Default to input expanded
     
@@ -370,36 +386,320 @@ struct PipelinesView: View {
     @ViewBuilder
     private func systemCoreContent() -> some View {
         VStack(spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("ACCESSIBILITY")
+            // Accessibility
+            settingsRow {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("ACCESSIBILITY")
+                            .font(OmoiFont.label(size: 11))
+                            .foregroundStyle(Color.omoiWhite)
+                        Text("Required for auto-paste functionality.")
+                            .font(OmoiFont.caption)
+                            .foregroundStyle(Color.omoiMuted)
+                    }
+                    Spacer()
+                    if AccessibilityPermissions.hasAccessibilityPermission() {
+                        HStack {
+                            Image(systemName: "checkmark.circle.fill")
+                            Text("GRANTED")
+                        }
                         .font(OmoiFont.label(size: 11))
-                        .foregroundStyle(Color.omoiWhite)
-                    Text("Required for auto-paste functionality.")
+                        .foregroundStyle(Color.omoiGreen)
+                    } else {
+                        Button("GRANT PERMISSION") {
+                            AccessibilityPermissions.openAccessibilitySettings()
+                        }
+                        .font(OmoiFont.label(size: 10))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.omoiOrange)
+                        .foregroundStyle(Color.omoiBlack)
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            Divider().overlay(Color.omoiGray.opacity(0.5))
+
+            // Auto-Restart
+            settingsRow {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("AUTO-RESTART")
+                            .font(OmoiFont.label(size: 11))
+                            .foregroundStyle(Color.omoiMuted)
+                        Text("Launch at login and restart if killed")
+                            .font(OmoiFont.caption)
+                            .foregroundStyle(Color.omoiMuted)
+                    }
+                    Spacer()
+                    Toggle("", isOn: Binding(
+                        get: { LaunchAgentManager.shared.isInstalled },
+                        set: { enable in
+                            if enable {
+                                do {
+                                    try LaunchAgentManager.shared.install()
+                                    settingsStatusMessage = "Auto-restart enabled"
+                                } catch {
+                                    settingsStatusMessage = "Failed: \(error.localizedDescription)"
+                                }
+                            } else {
+                                do {
+                                    try LaunchAgentManager.shared.uninstall()
+                                    settingsStatusMessage = "Auto-restart disabled"
+                                } catch {
+                                    settingsStatusMessage = "Failed: \(error.localizedDescription)"
+                                }
+                            }
+                        }
+                    ))
+                    .toggleStyle(.switch)
+                    .tint(Color.omoiTeal)
+                }
+                if LaunchAgentManager.shared.isInstalled {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(Color.omoiGreen)
+                        Text("Omoi will automatically restart if closed or killed")
+                            .font(OmoiFont.caption)
+                            .foregroundStyle(Color.omoiGreen)
+                    }
+                }
+            }
+
+            Divider().overlay(Color.omoiGray.opacity(0.5))
+
+            // Keyboard Shortcut
+            settingsRow {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("RECORD SHORTCUT")
+                            .font(OmoiFont.label(size: 11))
+                            .foregroundStyle(Color.omoiMuted)
+                            .frame(width: 120, alignment: .leading)
+                        Spacer()
+                        KeyboardShortcuts.Recorder(for: .toggleRecord) { shortcut in
+                            if let shortcut = shortcut {
+                                self.shortcutDescription = ShortcutFormatter.format(shortcut)
+                            } else {
+                                self.shortcutDescription = "None"
+                            }
+                        }
+                        .frame(minWidth: 150, minHeight: 30)
+                    }
+                    HStack {
+                        Text("Current:")
+                            .font(OmoiFont.label(size: 10))
+                            .foregroundStyle(Color.omoiMuted)
+                        Text(shortcutDescription)
+                            .font(OmoiFont.mono(size: 12))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.omoiTeal.opacity(0.2))
+                            .foregroundStyle(Color.omoiTeal)
+                        Spacer()
+                    }
+                    Text("Click recorder and press desired key combination")
+                        .font(OmoiFont.caption)
+                        .foregroundStyle(Color.omoiMuted)
+                    Text("Note: Fn key combinations not supported")
+                        .font(OmoiFont.caption)
+                        .foregroundStyle(Color.omoiOrange)
+                }
+            }
+
+            Divider().overlay(Color.omoiGray.opacity(0.5))
+
+            // Language
+            settingsRow {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("LANGUAGE")
+                            .font(OmoiFont.label(size: 11))
+                            .foregroundStyle(Color.omoiMuted)
+                            .frame(width: 120, alignment: .leading)
+                        Spacer()
+                        Picker("", selection: $transcriptionLanguage) {
+                            Text("Auto-Detect").tag("auto")
+                            Text("English").tag("en")
+                            Text("Spanish").tag("es")
+                            Text("French").tag("fr")
+                            Text("German").tag("de")
+                            Text("Italian").tag("it")
+                            Text("Portuguese").tag("pt")
+                            Text("Dutch").tag("nl")
+                            Text("Russian").tag("ru")
+                            Text("Chinese").tag("zh")
+                            Text("Japanese").tag("ja")
+                            Text("Korean").tag("ko")
+                            Text("Arabic").tag("ar")
+                            Text("Hindi").tag("hi")
+                            Text("Turkish").tag("tr")
+                            Text("Polish").tag("pl")
+                            Text("Swedish").tag("sv")
+                            Text("Norwegian").tag("no")
+                            Text("Danish").tag("da")
+                            Text("Finnish").tag("fi")
+                        }
+                        .labelsHidden()
+                        .frame(minWidth: 150)
+                    }
+                    Text("Auto-detect will identify the language automatically")
+                        .font(OmoiFont.caption)
+                        .foregroundStyle(Color.omoiMuted)
+                    Text("Whisper supports 99 languages total")
+                        .font(OmoiFont.caption)
+                        .foregroundStyle(Color.omoiTeal.opacity(0.7))
+                }
+            }
+
+            Divider().overlay(Color.omoiGray.opacity(0.5))
+
+            // Save Recordings
+            settingsRow {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("SAVE RECORDINGS FOR PLAYBACK")
+                            .font(OmoiFont.label(size: 11))
+                            .foregroundStyle(Color.omoiWhite)
+                        Spacer()
+                        Toggle("", isOn: $saveRecordingsForPlayback)
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                    }
+                    HStack {
+                        Text("STORAGE")
+                            .font(OmoiFont.label(size: 10))
+                            .foregroundStyle(Color.omoiMuted)
+                        Spacer()
+                        Text(ByteCountFormatter.string(fromByteCount: StorageManager.shared.recordingsStorageSize, countStyle: .file))
+                            .font(OmoiFont.mono(size: 12))
+                            .foregroundStyle(Color.omoiWhite)
+                        Text("(\(StorageManager.shared.recordingsCount))")
+                            .font(OmoiFont.mono(size: 11))
+                            .foregroundStyle(Color.omoiMuted)
+                    }
+                    Button(action: { showingDeleteRecordingsAlert = true }) {
+                        Text("DELETE ALL RECORDINGS")
+                            .font(OmoiFont.label(size: 10))
+                            .foregroundStyle(StorageManager.shared.recordingsCount == 0 ? Color.omoiGray : Color.omoiOrange)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(StorageManager.shared.recordingsCount == 0)
+                    Text("Recordings enable audio playback from history")
                         .font(OmoiFont.caption)
                         .foregroundStyle(Color.omoiMuted)
                 }
-                Spacer()
-                if AccessibilityPermissions.hasAccessibilityPermission() {
+            }
+
+            Divider().overlay(Color.omoiGray.opacity(0.5))
+
+            // Data
+            settingsRow {
+                VStack(alignment: .leading, spacing: 12) {
                     HStack {
-                        Image(systemName: "checkmark.circle.fill")
-                        Text("GRANTED")
+                        Text("INTEGRITY")
+                            .font(OmoiFont.label(size: 10))
+                            .foregroundStyle(Color.omoiMuted)
+                        Spacer()
+                        Text(integrityStatus.uppercased())
+                            .font(OmoiFont.mono(size: 11))
+                            .foregroundStyle(Color.omoiGreen)
                     }
-                    .font(OmoiFont.label(size: 11))
-                    .foregroundStyle(Color.omoiGreen)
-                } else {
-                    Button("GRANT PERMISSION") {
-                        AccessibilityPermissions.openAccessibilitySettings()
+                    if let info = historyInfo {
+                        HStack {
+                            Text("SESSIONS")
+                                .font(OmoiFont.label(size: 10))
+                                .foregroundStyle(Color.omoiMuted)
+                            Spacer()
+                            Text("\(info.sessionCount)")
+                                .font(OmoiFont.mono(size: 14))
+                                .foregroundStyle(Color.omoiWhite)
+                            Text(ByteCountFormatter.string(fromByteCount: info.fileSize, countStyle: .file))
+                                .font(OmoiFont.mono(size: 11))
+                                .foregroundStyle(Color.omoiMuted)
+                        }
                     }
-                    .font(OmoiFont.label(size: 10))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.omoiOrange)
-                    .foregroundStyle(Color.omoiBlack)
+                    HStack {
+                        Text("BACKUPS")
+                            .font(OmoiFont.label(size: 10))
+                            .foregroundStyle(Color.omoiMuted)
+                        Spacer()
+                        Text("\(backups.count)")
+                            .font(OmoiFont.mono(size: 14))
+                            .foregroundStyle(Color.omoiWhite)
+                    }
+                    HStack(spacing: 1) {
+                        settingsButton("EXPORT") { showingExportPanel = true }
+                        settingsButton("IMPORT") { showingImportPanel = true }
+                        settingsButton("BACKUP") { createManualBackup() }
+                    }
+                    .background(Color.omoiGray)
+                    if let message = settingsStatusMessage {
+                        Text(message.uppercased())
+                            .font(OmoiFont.label(size: 10))
+                            .foregroundStyle(Color.omoiGreen)
+                    }
+                    Button(action: { StorageManager.shared.revealInFinder() }) {
+                        Text("OPEN DATA FOLDER")
+                            .font(OmoiFont.label(size: 10))
+                            .foregroundStyle(Color.omoiTeal)
+                    }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(20)
+        }
+        .onAppear {
+            shortcutDescription = ShortcutFormatter.format(KeyboardShortcuts.getShortcut(for: .toggleRecord))
+            refreshDataStatus()
+        }
+        .fileExporter(
+            isPresented: $showingExportPanel,
+            document: HistoryDocument(),
+            contentType: .json,
+            defaultFilename: "omoi_history_\(Date().formatted(date: .numeric, time: .omitted)).json"
+        ) { result in
+            switch result {
+            case .success(let url):
+                showSettingsStatus("Exported to \(url.lastPathComponent)")
+            case .failure(let error):
+                showSettingsStatus("Export failed: \(error.localizedDescription)")
+            }
+        }
+        .fileImporter(
+            isPresented: $showingImportPanel,
+            allowedContentTypes: [.json],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                if let url = urls.first {
+                    importHistory(from: url)
+                }
+            case .failure(let error):
+                showSettingsStatus("Import failed: \(error.localizedDescription)")
+            }
+        }
+        .alert("Restore Backup?", isPresented: $showingRestoreAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Restore", role: .destructive) {
+                if let backup = selectedBackup {
+                    restoreBackup(backup)
+                }
+            }
+        } message: {
+            if let backup = selectedBackup {
+                Text("This will replace your current history with \(backup.sessionCount) sessions from \(backup.date.formatted()). A backup of your current data will be created first.")
+            }
+        }
+        .alert("Delete All Recordings?", isPresented: $showingDeleteRecordingsAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                StorageManager.shared.deleteAllRecordings()
+                showSettingsStatus("All recordings deleted")
+            }
+        } message: {
+            Text("This will permanently delete all \(StorageManager.shared.recordingsCount) audio recordings. Your transcription history will be preserved.")
         }
     }
     
@@ -473,8 +773,88 @@ struct PipelinesView: View {
         .frame(width: 300, height: 200)
     }
     
+    // MARK: - Settings Helpers
+
+    @ViewBuilder
+    private func settingsRow<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading) {
+            content()
+        }
+        .padding(20)
+    }
+
+    @ViewBuilder
+    private func settingsButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(OmoiFont.label(size: 10))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(Color.omoiDarkGray)
+                .foregroundStyle(Color.omoiTeal)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func refreshDataStatus() {
+        backups = StorageManager.shared.listAllBackups()
+        historyInfo = StorageManager.shared.currentHistoryInfo
+
+        let result = StorageManager.shared.verifyAndRecoverHistory()
+        switch result {
+        case .valid(let count):
+            integrityStatus = "Verified (\(count) sessions)"
+        case .corrupted(let error):
+            integrityStatus = "Error: \(error)"
+        case .missing:
+            integrityStatus = "No data yet"
+        case .recovered(let count, let backup):
+            integrityStatus = "Recovered \(count) from \(backup)"
+        }
+    }
+
+    private func createManualBackup() {
+        if let url = StorageManager.shared.createManualBackup() {
+            showSettingsStatus("Backup created: \(url.lastPathComponent)")
+            refreshDataStatus()
+        } else {
+            showSettingsStatus("No data to backup")
+        }
+    }
+
+    private func importHistory(from url: URL) {
+        do {
+            let count = try StorageManager.shared.importHistory(from: url, merge: true)
+            showSettingsStatus("Imported \(count) new sessions")
+            refreshDataStatus()
+        } catch {
+            showSettingsStatus("Import failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func restoreBackup(_ backup: StorageManager.BackupInfo) {
+        do {
+            let count = try StorageManager.shared.restoreFromBackup(backup)
+            showSettingsStatus("Restored \(count) sessions")
+            refreshDataStatus()
+        } catch {
+            showSettingsStatus("Restore failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func showSettingsStatus(_ message: String) {
+        withAnimation {
+            settingsStatusMessage = message
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            withAnimation {
+                settingsStatusMessage = nil
+            }
+        }
+    }
+
     // MARK: - Logic
-    
+
     private func previewSanitization() {
         guard let mostRecent = statsManager.sessions.first else { return }
         isPreviewLoading = true
@@ -504,9 +884,9 @@ struct PipelinesView: View {
     private func sanitizeSelected() {
         let sessions = statsManager.sessions
         guard !sessions.isEmpty else { return }
-        
+
         isSanitizingAll = true
-        
+
         Task {
             let api = APIService()
             for session in sessions {
@@ -521,5 +901,24 @@ struct PipelinesView: View {
             }
             await MainActor.run { isSanitizingAll = false }
         }
+    }
+}
+
+// MARK: - Document for Export
+
+struct HistoryDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.json] }
+
+    init() {}
+
+    init(configuration: ReadConfiguration) throws {
+        // Not used for export-only
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        let historyPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Omoi/history.json")
+        let data = try Data(contentsOf: historyPath)
+        return FileWrapper(regularFileWithContents: data)
     }
 }
