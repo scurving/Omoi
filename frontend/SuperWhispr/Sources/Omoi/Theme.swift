@@ -3,33 +3,33 @@ import SwiftUI
 // MARK: - Omoi Brand Colors
 
 extension Color {
-    // Grayscale spectrum
-    static let omoiBlack = Color(hex: "0A0A0A")
-    static let omoiDarkGray = Color(hex: "1A1A1A")
-    static let omoiGray = Color(hex: "2A2A2A")
-    static let omoiMidGray = Color(hex: "666666")
-    static let omoiLightGray = Color(hex: "999999")
-    static let omoiOffWhite = Color(hex: "E5E5E5")
-    static let omoiWhite = Color(hex: "FAFAFA")
+    // Core palette — deep teal foundation
+    static let omoiBlack = Color(hex: "0D3F3B")       // Deep teal background
+    static let omoiDarkGray = Color(hex: "0D3F3B")    // Cards (same as bg for seamless)
+    static let omoiGray = Color(hex: "28588A")        // Borders, dividers
+    static let omoiMidGray = Color(hex: "28588A")     // Steel blue muted
+    static let omoiLightGray = Color(hex: "287F8A")   // Teal accent text
+    static let omoiOffWhite = Color(hex: "C0E2F2")    // Ice blue — primary text
+    static let omoiWhite = Color(hex: "C0E2F2")       // Ice blue — headings
 
-    // Accent colors - Teal/Green spectrum
-    static let omoiTeal = Color(hex: "0D9488")        // Primary teal
-    static let omoiTealLight = Color(hex: "2DD4BF")   // Light teal
-    static let omoiGreen = Color(hex: "22C55E")       // Success green
+    // Accent — typed / tactile
+    static let omoiTeal = Color(hex: "287F8A")        // Typed data, interactive
+    static let omoiTealLight = Color(hex: "C0E2F2")   // Ice blue highlight
+    static let omoiGreen = Color(hex: "287F8A")       // Success (teal)
 
-    // Accent colors - Orange spectrum
-    static let omoiOrange = Color(hex: "F97316")      // Primary orange (recording/active)
-    static let omoiOrangeLight = Color(hex: "FB923C") // Light orange
+    // Accent — voice / vocal
+    static let omoiOrange = Color(hex: "EDDABC")      // Warm cream — voice data
+    static let omoiOrangeLight = Color(hex: "EDDABC") // Same cream
 
-    // Accent colors - Purple spectrum
-    static let omoiPurple = Color(hex: "A855F7")      // Creative/AI purple
-    static let omoiPurpleLight = Color(hex: "C084FC") // Light purple
+    // Accent — purple
+    static let omoiPurple = Color(hex: "7142D7")      // Rich purple — accent
+    static let omoiPurpleLight = Color(hex: "7142D7") // Same purple
 
     // Semantic colors
-    static let omoiActive = omoiOrange               // Recording, live states
-    static let omoiSuccess = omoiGreen               // Completed, success
-    static let omoiAccent = omoiTeal                 // Interactive, stats
-    static let omoiMuted = omoiMidGray               // Secondary text
+    static let omoiActive = Color(hex: "EDDABC")     // Recording — warm cream
+    static let omoiSuccess = Color(hex: "287F8A")     // Completed — teal
+    static let omoiAccent = Color(hex: "287F8A")      // Interactive — teal
+    static let omoiMuted = Color(hex: "28588A")       // Secondary text — steel blue
 
     // Helper initializer for hex colors
     init(hex: String) {
