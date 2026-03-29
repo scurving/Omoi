@@ -8,6 +8,13 @@ class SanitizationManager {
     @ObservationIgnored private let rulesKey = "Omoi.SanitizationRules"
     @ObservationIgnored private let presetsKey = "Omoi.SanitizationPresets"
     @ObservationIgnored private let pipelinesKey = "Omoi.SavedPipelines"
+    @ObservationIgnored private let retroPromptKey = "Omoi.RetroPrompt"
+    
+    var retrospectivePrompt: String {
+        didSet {
+            UserDefaults.standard.set(retrospectivePrompt, forKey: retroPromptKey)
+        }
+    }
 
     var rules: SanitizationRules {
         didSet {
@@ -47,7 +54,27 @@ class SanitizationManager {
            let decoded = try? JSONDecoder().decode([SavedPipeline].self, from: data) {
             self.savedPipelines = decoded
         }
+        
+        // Load retro prompt
+        self.retrospectivePrompt = UserDefaults.standard.string(forKey: retroPromptKey) ?? SanitizationManager.defaultRetrospectivePrompt
     }
+    
+    // MARK: - Defaults
+    
+    static let defaultRetrospectivePrompt = """
+You are a personal retrospective assistant. Analyze the following voice memos recorded throughout the day.
+
+Group your analysis by Application Context (e.g., Slack, Notes, Cursor).
+
+For each group:
+1. Summarize the key themes or tasks.
+2. Identify any action items or outstanding questions.
+3. Provide a brief "Insight" or "Reflection" on the content.
+
+Finally, provide a "Daily Synthesis" summarizing the overall day.
+
+Format the output in Markdown.
+"""
 
     func saveRules() {
         if let encoded = try? JSONEncoder().encode(rules) {

@@ -21,8 +21,8 @@ class OllamaService {
             let (data, _) = try await URLSession.shared.data(from: url)
             let response = try JSONDecoder().decode(ModelsResponse.self, from: data)
 
-            // Prefer llama3 > llama2 > mistral > first available
-            let preferredModels = ["llama3", "llama2", "mistral"]
+            // Prefer gemma3 > qwen3 > llama3 > mistral > first available
+            let preferredModels = ["gemma3", "qwen3", "llama3", "mistral"]
             for preferred in preferredModels {
                 if let model = response.models.first(where: { $0.name.contains(preferred) }) {
                     return model.name
@@ -100,7 +100,7 @@ class OllamaService {
     // MARK: - Retrospective Analysis
     
     /// Generate a daily retrospective analysis from a list of sessions
-    func generateRetrospective(sessions: [TranscriptionSession]) async throws -> String {
+    func generateRetrospective(sessions: [TranscriptionSession], customPrompt: String? = nil) async throws -> String {
         guard !sessions.isEmpty else {
             return "No voice memos found for this date."
         }
@@ -123,7 +123,7 @@ class OllamaService {
             return "[\(app)] (\(time)): \(content)"
         }.joined(separator: "\n\n")
         
-        let prompt = """
+        let systemInstruction = customPrompt ?? """
         You are a personal retrospective assistant. Analyze the following voice memos recorded throughout the day.
         
         Group your analysis by Application Context (e.g., Slack, Notes, Cursor).
@@ -136,6 +136,10 @@ class OllamaService {
         Finally, provide a "Daily Synthesis" summarizing the overall day.
         
         Format the output in Markdown.
+        """
+        
+        let prompt = """
+        \(systemInstruction)
         
         ---
         VOICE MEMOS:
@@ -149,6 +153,68 @@ class OllamaService {
             temperature: 0.7, // Higher creativity for analysis
             numPredict: 2000  // Allow longer response
         )
+    }
+
+    // MARK: - Dashboard Insight
+
+    func generateDashboardInsight(voiceWords: Int, typedWords: Int, voiceWpm: Double, typedWpm: Double, topApp: String?, keyboardStats: [(keyboard: String, wpm: Double)], hourlyPattern: String) async -> String {
+        if defaultModel == nil {
+            defaultModel = await detectDefaultModel()
+        }
+
+        guard let model = defaultModel else {
+            return fallbackInsight(voiceWords: voiceWords, typedWords: typedWords)
+        }
+
+        let total = voiceWords + typedWords
+        let prompt = """
+        You are a concise writing coach. Given today's productivity data, write ONE sentence (max 15 words) that's specific and encouraging. No emojis. No generic praise. Reference the actual numbers or patterns.
+
+        Today: \(total) words (\(voiceWords) voice, \(typedWords) typed)
+        Voice WPM: \(Int(voiceWpm)), Typed WPM: \(Int(typedWpm))
+        Top app: \(topApp ?? "unknown")
+        \(keyboardStats.isEmpty ? "" : "Keyboards: " + keyboardStats.map { "\($0.keyboard) at \(Int($0.wpm)) WPM" }.joined(separator: ", "))
+        Activity: \(hourlyPattern)
+
+        Write ONLY the one sentence, nothing else.
+        """
+
+        do {
+            return try await callOllama(model: model, prompt: prompt, temperature: 0.7, numPredict: 40)
+        } catch {
+            return fallbackInsight(voiceWords: voiceWords, typedWords: typedWords)
+        }
+    }
+
+    // MARK: - Dashboard Insight Bullets
+
+    func generateInsightBullets(context: String) async -> [String] {
+        if defaultModel == nil {
+            defaultModel = await detectDefaultModel()
+        }
+
+        guard let model = defaultModel else {
+            return ["Ollama not available — check if it's running."]
+        }
+
+        do {
+            let response = try await callOllama(model: model, prompt: context, temperature: 0.7, numPredict: 200)
+            let bullets = response
+                .components(separatedBy: "\n")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .prefix(4)
+            return Array(bullets)
+        } catch {
+            return ["Could not generate insights. Is Ollama running?"]
+        }
+    }
+
+    private func fallbackInsight(voiceWords: Int, typedWords: Int) -> String {
+        let total = voiceWords + typedWords
+        if total == 0 { return "Ready to start capturing." }
+        let dominant = voiceWords > typedWords ? "voice" : "typing"
+        return "\(total) words today, mostly \(dominant)."
     }
 
     // MARK: - Ollama API Call

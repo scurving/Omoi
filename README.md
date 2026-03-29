@@ -1,39 +1,40 @@
 # Omoi (思い)
 
-A macOS menu bar application that provides seamless Speech-to-Text capabilities with AI-powered text transformation using local models. Record voice transcriptions with a global keyboard shortcut and optionally transform text before pasting.
+**Track everything you say and type. Locally. Privately. Beautifully.**
 
-> **Note**: Formerly known as SuperWhispr, now rebranded as Omoi (思い - Japanese for "thought" or "memory")
+Omoi is a macOS app that measures your total written output — voice transcriptions and typed keystrokes — across every app, every keyboard, every hour of your day. All processing happens on your machine. Nothing leaves your computer.
 
-## Features
+Press Ctrl+Space to dictate. Type normally everywhere else. Omoi counts it all and shows you where your words go.
 
-- 🎤 **Speech-to-Text**: High-quality transcription using OpenAI's Whisper model (small)
-- ✨ **Text Transformation**: Apply custom transformations via local LLM (Ollama)
-- 🔄 **Transformation Pipelines**: Chain multiple presets in parallel or sequential modes
-- ⌘⇧R **Global Hotkey**: Activate recording from anywhere
-- 📋 **Smart Auto-Paste**: Automatically paste transcribed text into your active app
-- 🔒 **Privacy-First**: All processing happens locally on your machine
-- 📊 **Dashboard**: Track transcription history, WPM stats, and usage analytics
-- 🎯 **History Management**: Copy, replay audio, and apply transformations to past recordings
-- ⚡ **Seamless Integration**: Menu bar app that stays out of your way
+## What It Does
 
-## System Requirements
+**Voice** — Press Ctrl+Space anywhere to record. Whisper transcribes locally. Text auto-pastes into your active app.
 
-- **macOS**: 14.0 (Sonoma) or later
-- **Python**: 3.12+ (for backend)
-- **Xcode**: 15+ (for building from source)
-- **Disk Space**: ~3GB for models
-  - Whisper small: ~460MB
-  - Optional TTS: ~1.2GB
-  - Optional Ollama: varies by model
-- **RAM**: 8GB minimum, 16GB+ recommended
-- **Processor**: Apple Silicon (M1/M2/M3) or Intel
+**Keystroke Tracking** — Counts every keystroke via macOS CGEvent tap. Never logs what you type — only counts. Detects which keyboard you're using (built-in, NuPhy, external) via IOKit HID.
 
-### macOS Permissions
+**Unified Dashboard** — Combined word count, voice/typed WPM split, activity heatmaps (hourly/daily/monthly with hover breakdowns), per-app analytics, and LLM-generated insights via Ollama.
 
-Omoi requires the following permissions (will prompt on first use):
-- **Microphone access** (for audio recording)
-- **Accessibility permissions** (for auto-paste feature)
-- **Keyboard monitoring** (for global hotkey)
+**Encrypted** — All typing data encrypted at rest with AES-256-GCM. Key stored in macOS Keychain.
+
+## Requirements
+
+| What | Version | Why |
+|------|---------|-----|
+| **macOS** | 14.0 (Sonoma)+ | SwiftUI, CGEvent tap, IOKit HID APIs |
+| **Python** | 3.12+ | Whisper backend |
+| **FFmpeg** | any | Audio processing for Whisper |
+| **Ollama** | any | LLM insights + text transformation (optional but recommended) |
+| **Xcode / Swift** | 15+ / 5.9+ | Building from source |
+| **Disk** | ~1GB minimum | Whisper small model (~460MB) + Ollama model |
+| **RAM** | 8GB min, 16GB recommended | Whisper + Ollama running concurrently |
+
+### macOS Permissions (prompted on first launch)
+
+| Permission | What For |
+|------------|----------|
+| **Microphone** | Voice recording |
+| **Accessibility** | Auto-paste transcriptions + keystroke monitoring |
+| **Input Monitoring** | CGEvent tap for keystroke counting + keyboard detection |
 
 ## Installation Guide
 
@@ -65,13 +66,13 @@ brew services start ollama
 ollama pull qwen3:1.7b
 ```
 
-**Note**: Text transformation features require Ollama. If you skip this step, transcription will work but sanitization/transformation will be unavailable.
+**Note**: Ollama powers dashboard insights and text transformation. Transcription and keystroke tracking work without it, but the dashboard will show "Could not generate insights" and transformation features will be unavailable.
 
 ### Backend Setup
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/yourusername/Wisprrd.git
+   git clone https://github.com/scurving/Wisprrd.git
    cd Wisprrd/backend
    ```
 
@@ -134,7 +135,7 @@ ollama pull qwen3:1.7b
    - If backend fails, check Console.app for Python errors
 
 3. **Test Recording:**
-   - Press **⌘ + Shift + R**
+   - Press **Ctrl + Space**
    - Speak clearly
    - Release keys
    - Text should appear in active application
@@ -142,7 +143,7 @@ ollama pull qwen3:1.7b
 ## Daily Usage
 
 ### Basic Transcription
-1. Press **⌘ + Shift + R** to start recording
+1. Press **Ctrl + Space** to start recording
 2. Speak into your microphone
 3. Release to transcribe
 4. Text automatically pastes into active application
@@ -169,12 +170,15 @@ Wisprrd/
 │   └── venv/                       # Virtual environment (created during setup)
 ├── frontend/SuperWhispr/           # macOS SwiftUI application
 │   ├── Sources/Omoi/               # Swift source files
-│   │   ├── OmoiApp.swift          # Main app entry
-│   │   ├── BackendManager.swift   # Backend communication
-│   │   ├── AudioManager.swift     # Recording/playback
-│   │   ├── SanitizationManager.swift  # Transformation logic
+│   │   ├── OmoiApp.swift          # Main app entry + keyboard shortcut
+│   │   ├── KeystrokeMonitor.swift # CGEvent tap keystroke counting
+│   │   ├── KeyboardDetector.swift # IOKit HID keyboard detection
+│   │   ├── EncryptedStorageManager.swift  # AES-256-GCM typing data
+│   │   ├── TypingSession.swift    # Typing data models + storage
+│   │   ├── DashboardView.swift    # Stats dashboard + heatmaps
+│   │   ├── HistoryView.swift      # Unified voice+typing timeline
 │   │   ├── StatsManager.swift     # Analytics & history
-│   │   └── ...                     # UI components
+│   │   └── ...                     # Other UI components
 │   ├── Package.swift               # Swift Package Manager
 │   ├── build_app.sh                # Build script
 │   └── Omoi.entitlements           # macOS permissions
@@ -357,7 +361,7 @@ brew services restart ollama
 3. Launch Omoi, re-grant permission
 
 #### ❌ Keyboard shortcut not triggering
-**Problem**: Another app is using ⌘⇧R
+**Problem**: Another app is using Ctrl+Space
 **Solution**:
 - Open Omoi settings
 - Choose different keyboard shortcut
@@ -418,9 +422,9 @@ ollama list
 **100% Local Processing**: All audio and text processing happens on your machine. No data is sent to external servers.
 
 **Data Storage**:
-- Transcription history: `~/Library/Application Support/Omoi/`
-- Audio recordings: Stored locally, can be disabled in settings
-- Stats: Local SQLite database, never transmitted
+- Transcription history: `~/Documents/Omoi/history.json`
+- Audio recordings: `~/Documents/Omoi/recordings/`
+- Typing data: `~/Documents/Omoi/typing.enc` (AES-256-GCM encrypted, key in macOS Keychain)
 
 **Network Usage**:
 - Initial model downloads only (Whisper, Ollama)
@@ -428,7 +432,7 @@ ollama list
 - No cloud API calls
 
 **Permissions Scope**:
-- Microphone: Only when recording (⌘⇧R pressed)
+- Microphone: Only when recording (Ctrl+Space pressed)
 - Accessibility: Only for auto-paste (can be disabled)
 - Keyboard: Only for global hotkey monitoring
 
@@ -490,7 +494,7 @@ Contributions welcome! Please open an issue first to discuss proposed changes.
 
 ## License
 
-[Choose License] - Please add LICENSE file to repository
+MIT License - see [LICENSE](LICENSE)
 
 ## Acknowledgments
 

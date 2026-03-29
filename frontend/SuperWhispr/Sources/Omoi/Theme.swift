@@ -21,6 +21,10 @@ extension Color {
     static let omoiOrange = Color(hex: "F97316")      // Primary orange (recording/active)
     static let omoiOrangeLight = Color(hex: "FB923C") // Light orange
 
+    // Accent colors - Purple spectrum
+    static let omoiPurple = Color(hex: "A855F7")      // Creative/AI purple
+    static let omoiPurpleLight = Color(hex: "C084FC") // Light purple
+
     // Semantic colors
     static let omoiActive = omoiOrange               // Recording, live states
     static let omoiSuccess = omoiGreen               // Completed, success

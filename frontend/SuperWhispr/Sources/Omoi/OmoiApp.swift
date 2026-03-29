@@ -1,6 +1,7 @@
 
 import SwiftUI
 import KeyboardShortcuts
+import ServiceManagement
 
 @main
 struct OmoiApp: App {
@@ -48,10 +49,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
         print("   🎯 Set activation policy to .regular (full application)")
 
+        // Install LaunchAgent for auto-restart (if not already installed)
+        installLaunchAgentIfNeeded()
+
         // FORCE Fn+Space as default if no shortcut is set
         if KeyboardShortcuts.getShortcut(for: .toggleRecord) == nil {
-            print("🔧 No shortcut found, setting default to Fn+Space")
-            let defaultShortcut = KeyboardShortcuts.Shortcut(.space, modifiers: [.function])
+            print("🔧 No shortcut found, setting default to Ctrl+Space")
+            let defaultShortcut = KeyboardShortcuts.Shortcut(.space, modifiers: [.control])
             KeyboardShortcuts.setShortcut(defaultShortcut, for: .toggleRecord)
 
             // Verify it was set
@@ -86,6 +90,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         permissionMonitor = PermissionMonitor()
         permissionMonitor?.startMonitoring()
 
+        // Start keystroke monitoring (after permissions check)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            if AccessibilityPermissions.hasAccessibilityPermission() {
+                KeystrokeMonitor.shared.start()
+                print("⌨️ [AppDelegate] Keystroke monitoring started")
+            } else {
+                print("⚠️ [AppDelegate] Keystroke monitoring skipped — no Accessibility permission")
+            }
+        }
+
         // CHECK ACCESSIBILITY PERMISSIONS with detailed logging
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
             let hasPermission = AccessibilityPermissions.hasAccessibilityPermission()
@@ -105,6 +119,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return false  // Keep app running in menu bar when window closes
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        print("👋 [AppDelegate] Application is terminating...")
+        KeystrokeMonitor.shared.stop()
+        try? LaunchAgentManager.shared.unload()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -130,7 +150,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
 // Define a custom name for the keyboard shortcut for clarity.
 extension KeyboardShortcuts.Name {
-    static let toggleRecord = Self("toggleRecord", default: .init(.space, modifiers: [.function]))
+    static let toggleRecord = Self("toggleRecord", default: .init(.space, modifiers: [.control]))
 }
 
 // Define custom notification names.
@@ -138,4 +158,29 @@ extension Notification.Name {
     static let toggleRecord = Self("toggleRecordNotification")
     static let pastePermissionDenied = Notification.Name("pastePermissionDenied")
     static let pasteSuccess = Notification.Name("pasteSuccess")
+}
+
+// MARK: - LaunchAgent Management
+
+private func installLaunchAgentIfNeeded() {
+    // Only install if running from /Applications (installed location)
+    let bundlePath = Bundle.main.bundlePath
+    guard bundlePath.contains("/Applications/") else {
+        print("ℹ️ [LaunchAgent] Skipping - not running from /Applications")
+        return
+    }
+
+    // Check if already installed
+    if LaunchAgentManager.shared.isInstalled {
+        print("✅ [LaunchAgent] Already installed")
+        return
+    }
+
+    // Install the LaunchAgent
+    do {
+        try LaunchAgentManager.shared.install()
+        print("✅ [LaunchAgent] Auto-restart enabled!")
+    } catch {
+        print("❌ [LaunchAgent] Failed to install: \(error.localizedDescription)")
+    }
 }

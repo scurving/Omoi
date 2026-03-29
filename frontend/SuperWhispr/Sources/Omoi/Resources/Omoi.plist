@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.wisprrd.omoi</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Applications/Omoi.app/Contents/MacOS/Omoi</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+    <key>ProcessType</key>
+    <string>Interactive</string>
+    <key>StandardOutPath</key>
+    <string>/tmp/com.wisprrd.omoi.stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/com.wisprrd.omoi.stderr.log</string>
+</dict>
+</plist>

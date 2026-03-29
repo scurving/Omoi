@@ -34,8 +34,11 @@ DerivedData/
 AGENTS.md
 Research/
 docs/plans/
+docs/superpowers/
+.superpowers/
 frontend/SuperWhispr/docs/plans/
 UI_REDESIGN_STRATEGY.md
+CONTRIBUTING.md
 **/thinking/
 **/.thinking/
 *.thinking.md

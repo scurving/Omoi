@@ -7,7 +7,14 @@ struct HistoryView: View {
     @State private var searchText = ""
     @State private var selectedDateFilter = "all"
     @State private var selectedAppFilter = "all"
+    @State private var selectedModeFilter: InputMode = .all
     @State private var expandedSessionId: UUID?
+
+    enum InputMode: String, CaseIterable {
+        case all = "all"
+        case voice = "voice"
+        case typed = "typed"
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -17,16 +24,25 @@ struct HistoryView: View {
             // Content
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    if filteredSessions.isEmpty {
+                    if filteredVoiceSessions.isEmpty && filteredTypingSessions.isEmpty {
                         emptyStateView
                             .padding(.top, 60)
                     } else {
-                        ForEach(filteredSessions) { session in
-                            ExpandableHistoryRow(
-                                session: session,
-                                expandedSessionId: $expandedSessionId,
-                                statsManager: statsManager
-                            )
+                        // Interleave voice and typing sessions chronologically
+                        ForEach(unifiedTimeline, id: \.id) { entry in
+                            switch entry {
+                            case .voice(let session):
+                                ExpandableHistoryRow(
+                                    session: session,
+                                    expandedSessionId: $expandedSessionId,
+                                    statsManager: statsManager
+                                )
+                            case .typed(let session):
+                                TypingHistoryRow(
+                                    session: session,
+                                    expandedSessionId: $expandedSessionId
+                                )
+                            }
                         }
                     }
                 }
@@ -86,6 +102,18 @@ struct HistoryView: View {
                         }
                     }
                 }
+
+                Section("Input Mode") {
+                    Button(action: { selectedModeFilter = .all }) {
+                        Label("All", systemImage: selectedModeFilter == .all ? "checkmark" : "")
+                    }
+                    Button(action: { selectedModeFilter = .voice }) {
+                        Label("Voice", systemImage: selectedModeFilter == .voice ? "checkmark" : "")
+                    }
+                    Button(action: { selectedModeFilter = .typed }) {
+                        Label("Typed", systemImage: selectedModeFilter == .typed ? "checkmark" : "")
+                    }
+                }
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: AppIcons.History.filter)
@@ -119,11 +147,13 @@ struct HistoryView: View {
                 .foregroundStyle(Color.omoiGray)
 
             VStack(spacing: 8) {
-                if statsManager.sessions.isEmpty {
-                    Text("NO TRANSCRIPTIONS")
+                let hasVoice   = !statsManager.sessions.isEmpty
+                let hasTyped   = !statsManager.typingSessions.isEmpty
+                if !hasVoice && !hasTyped {
+                    Text("NO HISTORY")
                         .font(OmoiFont.label(size: 12))
                         .foregroundStyle(Color.omoiMuted)
-                    Text("Start recording to see history")
+                    Text("Record voice or start typing to see history")
                         .font(OmoiFont.body(size: 12))
                         .foregroundStyle(Color.omoiGray)
                 } else {
@@ -139,7 +169,50 @@ struct HistoryView: View {
     }
 
     // MARK: - Filtering Logic
-    private var filteredSessions: [TranscriptionSession] {
+
+    /// Unified timeline entry that can represent either a voice or typing session
+    enum TimelineEntry: Identifiable {
+        case voice(TranscriptionSession)
+        case typed(TypingSession)
+
+        var id: UUID {
+            switch self {
+            case .voice(let s):  return s.id
+            case .typed(let s): return s.id
+            }
+        }
+
+        var timestamp: Date {
+            switch self {
+            case .voice(let s):  return s.timestamp
+            case .typed(let s): return s.timestamp
+            }
+        }
+
+        var appBundleID: String? {
+            switch self {
+            case .voice(let s):  return s.targetAppBundleID
+            case .typed(let s): return s.appBundleID
+            }
+        }
+    }
+
+    /// Combined timeline of voice + typing sessions, sorted chronologically (newest first)
+    private var unifiedTimeline: [TimelineEntry] {
+        var entries: [TimelineEntry] = []
+
+        if selectedModeFilter == .all || selectedModeFilter == .voice {
+            entries += filteredVoiceSessions.map { .voice($0) }
+        }
+
+        if selectedModeFilter == .all || selectedModeFilter == .typed {
+            entries += filteredTypingSessions.map { .typed($0) }
+        }
+
+        return entries.sorted { $0.timestamp > $1.timestamp }
+    }
+
+    private var filteredVoiceSessions: [TranscriptionSession] {
         var result = statsManager.sessions
 
         // Date filter
@@ -170,6 +243,37 @@ struct HistoryView: View {
         return result
     }
 
+    private var filteredTypingSessions: [TypingSession] {
+        var result = statsManager.typingSessions
+
+        // Date filter
+        let calendar = Calendar.current
+        let now = Date()
+
+        if selectedDateFilter == "week" {
+            let weekAgo = calendar.date(byAdding: .day, value: -7, to: now) ?? now
+            result = result.filter { $0.timestamp >= weekAgo }
+        } else if selectedDateFilter == "month" {
+            let monthAgo = calendar.date(byAdding: .month, value: -1, to: now) ?? now
+            result = result.filter { $0.timestamp >= monthAgo }
+        }
+
+        // App filter (by bundle ID or app name)
+        if selectedAppFilter != "all" {
+            result = result.filter { $0.appName == selectedAppFilter }
+        }
+
+        // Search filter (by app name)
+        if !searchText.isEmpty {
+            result = result.filter { session in
+                session.appName.localizedCaseInsensitiveContains(searchText) ||
+                (session.windowTitle?.localizedCaseInsensitiveContains(searchText) ?? false)
+            }
+        }
+
+        return result
+    }
+
     private var topApps: [String] {
         let appNames = statsManager.sessions
             .compactMap { $0.targetAppName }
@@ -186,6 +290,7 @@ struct HistoryView: View {
         var count = 0
         if selectedDateFilter != "all" { count += 1 }
         if selectedAppFilter != "all" { count += 1 }
+        if selectedModeFilter != .all { count += 1 }
         return count
     }
 }

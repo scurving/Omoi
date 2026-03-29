@@ -17,7 +17,7 @@ struct ContentView: View {
                 tabButton("STATS", icon: "chart.bar.fill", tag: 1)
                 tabButton("HISTORY", icon: "clock.fill", tag: 2)
                 tabButton("RETRO", icon: "brain.head.profile", tag: 3)
-                tabButton("PRIVACY", icon: "eye.slash.fill", tag: 4)
+                tabButton("PIPELINES", icon: "slider.horizontal.3", tag: 4)
             }
             .background(Color.omoiDarkGray)
             .overlay(
@@ -39,7 +39,7 @@ struct ContentView: View {
                 case 3:
                     RetroView(statsManager: viewModel.stats)
                 case 4:
-                    PrivacyView(statsManager: viewModel.stats)
+                    PipelinesView(statsManager: viewModel.stats)
                 default:
                     RecordView(viewModel: viewModel)
                 }

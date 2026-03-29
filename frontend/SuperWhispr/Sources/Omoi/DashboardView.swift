@@ -5,20 +5,24 @@ import Charts
 // Brutalist design: sharp edges, high contrast, monospace stats
 
 struct DashboardView: View {
+    enum TimeRange: String, CaseIterable {
+        case today = "TODAY"
+        case week = "THIS WEEK"
+        case allTime = "ALL TIME"
+    }
+
     @ObservedObject var statsManager: StatsManager
-    @State private var selectedChartMetric: ChartMetric = .words
     @State private var selectedDate: Date? = nil
     @State private var showingDetailModal = false
     @State private var showingClearAlert = false
     @State private var showingExportSheet = false
-    @State private var showTrendLine = true
     @State private var selectedTagFilter: String? = nil
-    @State private var showingGoalSetup = false
-
-    enum ChartMetric: String, CaseIterable {
-        case words = "Words"
-        case wpm = "WPM"
-    }
+    @State private var selectedTimeRange: TimeRange = .today
+    @State private var hoveredHour: Int? = nil
+    @State private var hoveredDay: Date? = nil
+    @State private var hoveredMonth: Date? = nil
+    @State private var llmInsights: [String] = []
+    @State private var isLoadingInsights = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -37,9 +41,6 @@ struct DashboardView: View {
                     // Show empty state if no sessions
                     if statsManager.sessions.isEmpty {
                         emptyStateView
-                    } else {
-                        // Weekly Narrative Block
-                        weeklyNarrativeCard
                     }
 
                     // Only show stats if we have data
@@ -67,86 +68,585 @@ struct DashboardView: View {
         } message: {
             Text("This will permanently delete all \(statsManager.sessions.count) sessions. This action cannot be undone.")
         }
-        .sheet(isPresented: $showingGoalSetup) {
-            GoalSetupSheet(statsManager: statsManager, isPresented: $showingGoalSetup)
-        }
     }
 
     @ViewBuilder
     private var statsContent: some View {
         VStack(spacing: 1) {
-            // Goals Section (full-width brutalist block)
-            goalsProgressSection
+            // Hero insight block
+            heroInsightBlock
 
-            // Current Streak Highlight (if active)
-            if statsManager.currentStreak > 0 {
-                currentStreakCard
-            }
-
-            // Stats Grid - 2x2 with 1px gaps
-            LazyVGrid(columns: [
-                GridItem(.flexible(), spacing: 1),
-                GridItem(.flexible(), spacing: 1)
-            ], spacing: 1) {
-                statCardWithTrend(
-                    title: "WORDS",
-                    value: formatNumber(statsManager.totalWords),
-                    icon: AppIcons.Dashboard.words,
-                    trend: trendForTotalWords(),
-                    trendText: trendTextForTotalWords()
-                )
-
-                statCardWithTrend(
-                    title: "AVG WPM",
-                    value: "\(Int(statsManager.averageWPM))",
-                    icon: AppIcons.Dashboard.speed,
-                    trend: nil,
-                    trendText: nil
-                )
-
-                statCardWithTrend(
-                    title: "APPS",
-                    value: "\(statsManager.topApps.count)",
-                    icon: AppIcons.Dashboard.apps,
-                    trend: nil,
-                    trendText: statsManager.topApps.first.map { $0.name }
-                )
-
-                statCardWithTrend(
-                    title: "THIS WEEK",
-                    value: formatNumber(thisWeekWords()),
-                    icon: AppIcons.Dashboard.chart,
-                    trend: weekTrend(),
-                    trendText: weekTrendText()
-                )
+            // Time range toggle
+            HStack(spacing: 0) {
+                ForEach(TimeRange.allCases, id: \.self) { range in
+                    Button(action: { selectedTimeRange = range }) {
+                        Text(range.rawValue)
+                            .font(OmoiFont.label(size: 10))
+                            .foregroundStyle(selectedTimeRange == range ? Color.omoiBlack : Color.omoiMuted)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(selectedTimeRange == range ? Color.omoiTeal : Color.clear)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
             .background(Color.omoiGray)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.omoiDarkGray)
+
+            // Activity visualization (adapts to time range)
+            switch selectedTimeRange {
+            case .today:
+                activityHeatmap
+            case .week:
+                weeklyHeatmap
+            case .allTime:
+                monthlyHeatmap
+            }
 
             // Peak Hour Block
-            if let peak = statsManager.peakProductivityHour {
+            if let peak = filteredPeakHour {
                 peakHourCard(hour: peak.hour, words: peak.words)
             }
 
-            // Chart Section
-            if !statsManager.wordsPerDay.isEmpty || !statsManager.wpmPerDay.isEmpty {
-                chartSection
-            }
-
             // App Stats Breakdown (words + WPM per app)
-            if !statsManager.statsByApp.isEmpty {
+            if !allAppStats.isEmpty {
                 appWPMSection
             }
 
-            // Week Comparison
-            if !statsManager.weekOverWeekComparison.isEmpty {
-                weekComparisonSection
-            }
-
-            // Insights
-            if !statsManager.performanceInsights.isEmpty {
-                performanceInsightsSection
+            // LLM Insights
+            insightsBlock
+        }
+        .onAppear {
+            if llmInsights.isEmpty {
+                generateInsights()
             }
         }
+    }
+
+    // MARK: - Hero Insight Block
+
+    @ViewBuilder
+    private var heroInsightBlock: some View {
+        HStack(alignment: .center, spacing: 0) {
+            // Left: big number
+            VStack(alignment: .leading, spacing: 4) {
+                Text("TODAY")
+                    .font(OmoiFont.label(size: 11))
+                    .foregroundStyle(Color.omoiMuted)
+                Text(formatNumber(thisWeekVoiceWords() + thisWeekTypedWords()))
+                    .font(OmoiFont.brand(size: 48))
+                    .foregroundStyle(Color.omoiWhite)
+            }
+            .padding(.leading, 24)
+
+            Spacer()
+
+            // Right: 4 mini stat pills in 2x2 grid
+            VStack(spacing: 6) {
+                HStack(spacing: 6) {
+                    statPill(label: "VOICE", value: formatNumber(thisWeekVoiceWords()), color: Color.omoiOrange)
+                    statPill(label: "TYPED", value: formatNumber(thisWeekTypedWords()), color: Color.omoiTeal)
+                }
+                HStack(spacing: 6) {
+                    statPill(label: "VOICE WPM", value: "\(Int(statsManager.averageWPM))", color: Color.omoiOrange)
+                    statPill(label: "TYPED WPM", value: "\(Int(typedAverageWpm()))", color: Color.omoiTeal)
+                }
+            }
+            .padding(.trailing, 24)
+        }
+        .padding(.vertical, 20)
+        .background(Color.omoiDarkGray)
+    }
+
+    private func typedAverageWpm() -> Double {
+        let kbWpm = statsManager.wpmByKeyboard
+        guard !kbWpm.isEmpty else { return 0 }
+        return kbWpm.reduce(0.0) { $0 + $1.avgWpm } / Double(kbWpm.count)
+    }
+
+    @ViewBuilder
+    private func statPill(label: String, value: String, color: Color) -> some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(OmoiFont.mono(size: 16))
+                .foregroundStyle(Color.omoiWhite)
+            Text(label)
+                .font(OmoiFont.label(size: 9))
+                .foregroundStyle(color)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(color.opacity(0.1))
+    }
+
+    // MARK: - Activity Heatmap
+
+    struct HourData {
+        let voiceIntensity: Double
+        let typedIntensity: Double
+    }
+
+    private var activityHeatmap: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("TODAY")
+                .font(OmoiFont.label(size: 11))
+                .foregroundStyle(Color.omoiMuted)
+                .padding(.horizontal, 20)
+
+            HStack(spacing: 2) {
+                ForEach(6..<24, id: \.self) { hour in
+                    let data = hourlyData(for: hour)
+                    VStack(spacing: 1) {
+                        Rectangle()
+                            .fill(Color.omoiOrange.opacity(data.voiceIntensity))
+                            .frame(height: 24)
+                        Rectangle()
+                            .fill(Color.omoiTeal.opacity(data.typedIntensity))
+                            .frame(height: 24)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 2)
+                            .stroke(hoveredHour == hour ? Color.omoiTeal : Color.clear, lineWidth: 1)
+                    )
+                    .onContinuousHover { phase in
+                        switch phase {
+                        case .active: hoveredHour = hour
+                        case .ended: hoveredHour = nil
+                        }
+                    }
+                    .popover(isPresented: Binding(
+                        get: { hoveredHour == hour },
+                        set: { if !$0 { hoveredHour = nil } }
+                    ), arrowEdge: .bottom) {
+                        heatmapTooltip(for: hour)
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+
+            // Hour labels (every 3 hours)
+            HStack(spacing: 0) {
+                ForEach(6..<24, id: \.self) { hour in
+                    Text(hour % 3 == 0 ? "\(hour > 12 ? hour - 12 : hour)\(hour >= 12 ? "p" : "a")" : "")
+                        .font(OmoiFont.mono(size: 8))
+                        .foregroundStyle(Color.omoiMuted)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .padding(.horizontal, 20)
+        }
+        .padding(.vertical, 16)
+        .background(Color.omoiDarkGray)
+    }
+
+    private func hourlyData(for hour: Int) -> HourData {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+
+        // Voice: count words from sessions in this hour today
+        let voiceWords = statsManager.sessions
+            .filter { session in
+                let sessionHour = calendar.component(.hour, from: session.timestamp)
+                return calendar.isDateInToday(session.timestamp) && sessionHour == hour
+            }
+            .reduce(0) { $0 + $1.wordCount }
+
+        // Typed: get from hourly aggregates
+        let typedWords: Int
+        if let hourDate = calendar.date(bySettingHour: hour, minute: 0, second: 0, of: today),
+           let hourFloor = calendar.dateInterval(of: .hour, for: hourDate)?.start {
+            let agg = EncryptedStorageManager.shared.typingStorage.hourlyAggregates[hourFloor]
+            typedWords = agg?.byApp.values.reduce(0) { $0 + $1.estimatedWords } ?? 0
+        } else {
+            typedWords = 0
+        }
+
+        let maxWordsPerHour = 200.0
+        return HourData(
+            voiceIntensity: min(Double(voiceWords) / maxWordsPerHour, 1.0),
+            typedIntensity: min(Double(typedWords) / maxWordsPerHour, 1.0)
+        )
+    }
+
+    // MARK: - Weekly Heatmap (7 days)
+
+    private var weeklyHeatmap: some View {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let days: [(date: Date, label: String)] = (0..<7).reversed().compactMap { offset in
+            guard let date = calendar.date(byAdding: .day, value: -offset, to: today) else { return nil }
+            let label = calendar.isDateInToday(date) ? "Today" : date.formatted(.dateTime.weekday(.abbreviated))
+            return (date: date, label: label)
+        }
+
+        let maxWords = max(days.map { dailyWords(for: $0.date).voice + dailyWords(for: $0.date).typed }.max() ?? 1, 1)
+
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("THIS WEEK")
+                .font(OmoiFont.label(size: 11))
+                .foregroundStyle(Color.omoiMuted)
+                .padding(.horizontal, 20)
+
+            HStack(spacing: 3) {
+                ForEach(Array(days.enumerated()), id: \.offset) { _, day in
+                    let data = dailyWords(for: day.date)
+                    let voiceI = Double(data.voice) / Double(maxWords)
+                    let typedI = Double(data.typed) / Double(maxWords)
+
+                    VStack(spacing: 1) {
+                        Rectangle()
+                            .fill(Color.omoiOrange.opacity(max(voiceI, 0.05)))
+                            .frame(height: 24)
+                        Rectangle()
+                            .fill(Color.omoiTeal.opacity(max(typedI, 0.05)))
+                            .frame(height: 24)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 2)
+                            .stroke(hoveredDay == day.date ? Color.omoiTeal : Color.clear, lineWidth: 1)
+                    )
+                    .onContinuousHover { phase in
+                        switch phase {
+                        case .active: hoveredDay = day.date
+                        case .ended: hoveredDay = nil
+                        }
+                    }
+                    .popover(isPresented: Binding(
+                        get: { hoveredDay == day.date },
+                        set: { if !$0 { hoveredDay = nil } }
+                    ), arrowEdge: .bottom) {
+                        dayTooltip(for: day.date)
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+
+            HStack(spacing: 3) {
+                ForEach(Array(days.enumerated()), id: \.offset) { _, day in
+                    Text(day.label.prefix(3).uppercased())
+                        .font(OmoiFont.mono(size: 8))
+                        .foregroundStyle(Color.omoiMuted)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .padding(.horizontal, 20)
+        }
+        .padding(.vertical, 16)
+        .background(Color.omoiDarkGray)
+    }
+
+    private func dailyWords(for date: Date) -> (voice: Int, typed: Int) {
+        let calendar = Calendar.current
+        let voice = statsManager.sessions
+            .filter { calendar.isDate($0.timestamp, inSameDayAs: date) }
+            .reduce(0) { $0 + $1.wordCount }
+        let typed = statsManager.typingSessions
+            .filter { calendar.isDate($0.timestamp, inSameDayAs: date) }
+            .reduce(0) { $0 + $1.wordCount }
+        return (voice, typed)
+    }
+
+    // MARK: - Monthly Heatmap (12 months)
+
+    private var monthlyHeatmap: some View {
+        let calendar = Calendar.current
+        let now = Date()
+        let months: [(date: Date, label: String)] = (0..<12).reversed().compactMap { offset in
+            guard let rawDate = calendar.date(byAdding: .month, value: -offset, to: now),
+                  let monthStart = calendar.dateInterval(of: .month, for: rawDate)?.start else { return nil }
+            return (date: monthStart, label: rawDate.formatted(.dateTime.month(.abbreviated)))
+        }
+
+        let maxWords = max(months.map { monthlyWords(for: $0.date).voice + monthlyWords(for: $0.date).typed }.max() ?? 1, 1)
+
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("ALL TIME")
+                .font(OmoiFont.label(size: 11))
+                .foregroundStyle(Color.omoiMuted)
+                .padding(.horizontal, 20)
+
+            HStack(spacing: 3) {
+                ForEach(Array(months.enumerated()), id: \.offset) { _, month in
+                    let data = monthlyWords(for: month.date)
+                    let voiceI = Double(data.voice) / Double(maxWords)
+                    let typedI = Double(data.typed) / Double(maxWords)
+
+                    VStack(spacing: 1) {
+                        Rectangle()
+                            .fill(Color.omoiOrange.opacity(max(voiceI, 0.05)))
+                            .frame(height: 24)
+                        Rectangle()
+                            .fill(Color.omoiTeal.opacity(max(typedI, 0.05)))
+                            .frame(height: 24)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 2)
+                            .stroke(hoveredMonth == month.date ? Color.omoiTeal : Color.clear, lineWidth: 1)
+                    )
+                    .onContinuousHover { phase in
+                        switch phase {
+                        case .active: hoveredMonth = month.date
+                        case .ended: hoveredMonth = nil
+                        }
+                    }
+                    .popover(isPresented: Binding(
+                        get: { hoveredMonth == month.date },
+                        set: { if !$0 { hoveredMonth = nil } }
+                    ), arrowEdge: .bottom) {
+                        monthTooltip(for: month.date)
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+
+            HStack(spacing: 3) {
+                ForEach(Array(months.enumerated()), id: \.offset) { _, month in
+                    Text(month.label.prefix(3).uppercased())
+                        .font(OmoiFont.mono(size: 8))
+                        .foregroundStyle(Color.omoiMuted)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .padding(.horizontal, 20)
+        }
+        .padding(.vertical, 16)
+        .background(Color.omoiDarkGray)
+    }
+
+    private func monthlyWords(for date: Date) -> (voice: Int, typed: Int) {
+        let calendar = Calendar.current
+        guard let monthInterval = calendar.dateInterval(of: .month, for: date) else {
+            return (0, 0)
+        }
+        let voice = statsManager.sessions
+            .filter { $0.timestamp >= monthInterval.start && $0.timestamp < monthInterval.end }
+            .reduce(0) { $0 + $1.wordCount }
+        let typed = statsManager.typingSessions
+            .filter { $0.timestamp >= monthInterval.start && $0.timestamp < monthInterval.end }
+            .reduce(0) { $0 + $1.wordCount }
+        return (voice, typed)
+    }
+
+    // MARK: - Heatmap Tooltip
+
+    @ViewBuilder
+    private func heatmapTooltip(for hour: Int) -> some View {
+        let calendar = Calendar.current
+
+        let voiceSessions = statsManager.sessions.filter { session in
+            calendar.isDateInToday(session.timestamp) &&
+            calendar.component(.hour, from: session.timestamp) == hour
+        }
+        let typedSessions = statsManager.typingSessions.filter { session in
+            calendar.isDateInToday(session.timestamp) &&
+            calendar.component(.hour, from: session.timestamp) == hour
+        }
+
+        let totalVoice = voiceSessions.reduce(0) { $0 + $1.wordCount }
+        let totalTyped = typedSessions.reduce(0) { $0 + $1.wordCount }
+
+        let voiceByApp = Dictionary(grouping: voiceSessions) { $0.targetAppName ?? "Unknown" }
+        let typedByApp = Dictionary(grouping: typedSessions) { $0.appName }
+        let allApps = Set(voiceByApp.keys).union(typedByApp.keys)
+
+        VStack(alignment: .leading, spacing: 8) {
+            Text(formatHour(hour))
+                .font(OmoiFont.label(size: 11))
+                .foregroundStyle(Color.omoiWhite)
+
+            if totalVoice + totalTyped == 0 {
+                Text("No activity")
+                    .font(OmoiFont.body(size: 11))
+                    .foregroundStyle(Color.omoiMuted)
+            } else {
+                HStack(spacing: 12) {
+                    HStack(spacing: 4) {
+                        Circle().fill(Color.omoiOrange).frame(width: 6, height: 6)
+                        Text("\(totalVoice) voice")
+                            .font(OmoiFont.mono(size: 10))
+                            .foregroundStyle(Color.omoiOrange)
+                    }
+                    HStack(spacing: 4) {
+                        Circle().fill(Color.omoiTeal).frame(width: 6, height: 6)
+                        Text("\(totalTyped) typed")
+                            .font(OmoiFont.mono(size: 10))
+                            .foregroundStyle(Color.omoiTeal)
+                    }
+                }
+
+                ForEach(Array(allApps.sorted().prefix(4)), id: \.self) { app in
+                    let vWords = voiceByApp[app]?.reduce(0) { $0 + $1.wordCount } ?? 0
+                    let tWords = typedByApp[app]?.reduce(0) { $0 + $1.wordCount } ?? 0
+                    HStack {
+                        Text(app)
+                            .font(OmoiFont.body(size: 10))
+                            .foregroundStyle(Color.omoiOffWhite)
+                            .lineLimit(1)
+                        Spacer()
+                        if vWords > 0 {
+                            Text("\(vWords)")
+                                .font(OmoiFont.mono(size: 9))
+                                .foregroundStyle(Color.omoiOrange)
+                        }
+                        if tWords > 0 {
+                            Text("\(tWords)")
+                                .font(OmoiFont.mono(size: 9))
+                                .foregroundStyle(Color.omoiTeal)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .frame(minWidth: 150)
+        .background(Color.omoiDarkGray)
+    }
+
+    // MARK: - Day Tooltip
+
+    @ViewBuilder
+    private func dayTooltip(for date: Date) -> some View {
+        let calendar = Calendar.current
+        let voiceSessions = statsManager.sessions.filter { calendar.isDate($0.timestamp, inSameDayAs: date) }
+        let typedSessions = statsManager.typingSessions.filter { calendar.isDate($0.timestamp, inSameDayAs: date) }
+        let totalVoice = voiceSessions.reduce(0) { $0 + $1.wordCount }
+        let totalTyped = typedSessions.reduce(0) { $0 + $1.wordCount }
+
+        let voiceByApp = Dictionary(grouping: voiceSessions) { $0.targetAppName ?? "Unknown" }
+        let typedByApp = Dictionary(grouping: typedSessions) { $0.appName }
+        let allApps = Set(voiceByApp.keys).union(typedByApp.keys)
+
+        VStack(alignment: .leading, spacing: 8) {
+            Text(date.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
+                .font(OmoiFont.label(size: 11))
+                .foregroundStyle(Color.omoiWhite)
+
+            if totalVoice + totalTyped == 0 {
+                Text("No activity")
+                    .font(OmoiFont.body(size: 11))
+                    .foregroundStyle(Color.omoiMuted)
+            } else {
+                HStack(spacing: 12) {
+                    HStack(spacing: 4) {
+                        Circle().fill(Color.omoiOrange).frame(width: 6, height: 6)
+                        Text("\(totalVoice) voice")
+                            .font(OmoiFont.mono(size: 10))
+                            .foregroundStyle(Color.omoiOrange)
+                    }
+                    HStack(spacing: 4) {
+                        Circle().fill(Color.omoiTeal).frame(width: 6, height: 6)
+                        Text("\(totalTyped) typed")
+                            .font(OmoiFont.mono(size: 10))
+                            .foregroundStyle(Color.omoiTeal)
+                    }
+                }
+
+                ForEach(Array(allApps.sorted().prefix(4)), id: \.self) { app in
+                    let vWords = voiceByApp[app]?.reduce(0) { $0 + $1.wordCount } ?? 0
+                    let tWords = typedByApp[app]?.reduce(0) { $0 + $1.wordCount } ?? 0
+                    HStack {
+                        Text(app)
+                            .font(OmoiFont.body(size: 10))
+                            .foregroundStyle(Color.omoiOffWhite)
+                            .lineLimit(1)
+                        Spacer()
+                        if vWords > 0 {
+                            Text("\(vWords)")
+                                .font(OmoiFont.mono(size: 9))
+                                .foregroundStyle(Color.omoiOrange)
+                        }
+                        if tWords > 0 {
+                            Text("\(tWords)")
+                                .font(OmoiFont.mono(size: 9))
+                                .foregroundStyle(Color.omoiTeal)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .frame(minWidth: 150)
+        .background(Color.omoiDarkGray)
+    }
+
+    // MARK: - Month Tooltip
+
+    @ViewBuilder
+    private func monthTooltip(for date: Date) -> some View {
+        let calendar = Calendar.current
+        let monthInterval = calendar.dateInterval(of: .month, for: date)
+        let voiceSessions = statsManager.sessions.filter { s in
+            guard let mi = monthInterval else { return false }
+            return s.timestamp >= mi.start && s.timestamp < mi.end
+        }
+        let typedSessions = statsManager.typingSessions.filter { s in
+            guard let mi = monthInterval else { return false }
+            return s.timestamp >= mi.start && s.timestamp < mi.end
+        }
+        let totalVoice = voiceSessions.reduce(0) { $0 + $1.wordCount }
+        let totalTyped = typedSessions.reduce(0) { $0 + $1.wordCount }
+
+        let voiceByApp = Dictionary(grouping: voiceSessions) { $0.targetAppName ?? "Unknown" }
+        let typedByApp = Dictionary(grouping: typedSessions) { $0.appName }
+        let allApps = Set(voiceByApp.keys).union(typedByApp.keys)
+
+        VStack(alignment: .leading, spacing: 8) {
+            Text(date.formatted(.dateTime.month(.wide).year()))
+                .font(OmoiFont.label(size: 11))
+                .foregroundStyle(Color.omoiWhite)
+
+            if totalVoice + totalTyped == 0 {
+                Text("No activity")
+                    .font(OmoiFont.body(size: 11))
+                    .foregroundStyle(Color.omoiMuted)
+            } else {
+                HStack(spacing: 12) {
+                    HStack(spacing: 4) {
+                        Circle().fill(Color.omoiOrange).frame(width: 6, height: 6)
+                        Text("\(totalVoice) voice")
+                            .font(OmoiFont.mono(size: 10))
+                            .foregroundStyle(Color.omoiOrange)
+                    }
+                    HStack(spacing: 4) {
+                        Circle().fill(Color.omoiTeal).frame(width: 6, height: 6)
+                        Text("\(totalTyped) typed")
+                            .font(OmoiFont.mono(size: 10))
+                            .foregroundStyle(Color.omoiTeal)
+                    }
+                }
+
+                ForEach(Array(allApps.sorted().prefix(5)), id: \.self) { app in
+                    let vWords = voiceByApp[app]?.reduce(0) { $0 + $1.wordCount } ?? 0
+                    let tWords = typedByApp[app]?.reduce(0) { $0 + $1.wordCount } ?? 0
+                    HStack {
+                        Text(app)
+                            .font(OmoiFont.body(size: 10))
+                            .foregroundStyle(Color.omoiOffWhite)
+                            .lineLimit(1)
+                        Spacer()
+                        if vWords > 0 {
+                            Text("\(vWords)")
+                                .font(OmoiFont.mono(size: 9))
+                                .foregroundStyle(Color.omoiOrange)
+                        }
+                        if tWords > 0 {
+                            Text("\(tWords)")
+                                .font(OmoiFont.mono(size: 9))
+                                .foregroundStyle(Color.omoiTeal)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .frame(minWidth: 180)
+        .background(Color.omoiDarkGray)
     }
 
     // MARK: - Tag Filter Bar
@@ -191,14 +691,6 @@ struct DashboardView: View {
                 .foregroundStyle(Color.omoiWhite)
 
             Spacer()
-
-            // Goals
-            Button(action: { showingGoalSetup = true }) {
-                Text("GOALS")
-                    .font(OmoiFont.label(size: 11))
-                    .foregroundStyle(Color.omoiTeal)
-            }
-            .buttonStyle(.plain)
 
             // Export
             Button(action: { exportData() }) {
@@ -273,28 +765,6 @@ struct DashboardView: View {
     }
 
     // MARK: - Weekly Narrative Block
-    @ViewBuilder
-    private var weeklyNarrativeCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(weeklyNarrativeTitle())
-                .font(OmoiFont.heading(size: 24))
-                .foregroundStyle(Color.omoiWhite)
-
-            Text(weeklyNarrativeSubtitle())
-                .font(OmoiFont.body(size: 14))
-                .foregroundStyle(Color.omoiMuted)
-                .lineLimit(3)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(20)
-        .background(Color.omoiDarkGray)
-        .overlay(
-            Rectangle()
-                .stroke(Color.omoiTeal, lineWidth: 2),
-            alignment: .leading
-        )
-    }
-
     // MARK: - Peak Hour Block
     @ViewBuilder
     private func peakHourCard(hour: Int, words: Int) -> some View {
@@ -331,63 +801,36 @@ struct DashboardView: View {
         )
     }
 
-    // MARK: - Current Streak Block
-    @ViewBuilder
-    private var currentStreakCard: some View {
-        HStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("STREAK")
-                    .font(OmoiFont.label(size: 11))
-                    .foregroundStyle(Color.omoiMuted)
-
-                // Progress bar - brutalist style
-                GeometryReader { geometry in
-                    ZStack(alignment: .leading) {
-                        Rectangle()
-                            .fill(Color.omoiGray)
-                        Rectangle()
-                            .fill(Color.omoiOrange)
-                            .frame(width: geometry.size.width * min(Double(statsManager.currentStreak) / 30.0, 1.0))
-                    }
-                }
-                .frame(height: 4)
-            }
-
-            Spacer()
-
-            Text("\(statsManager.currentStreak)")
-                .font(OmoiFont.stat)
-                .foregroundStyle(Color.omoiOrange)
-
-            Text("DAYS")
-                .font(OmoiFont.label(size: 11))
-                .foregroundStyle(Color.omoiMuted)
-        }
-        .padding(20)
-        .background(Color.omoiDarkGray)
-        .overlay(
-            Rectangle()
-                .frame(height: 1)
-                .foregroundStyle(Color.omoiGray),
-            alignment: .top
-        )
-    }
-
     // MARK: - App Stats Breakdown Section
     @ViewBuilder
     private var appWPMSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Section header
-            Text("BY APP")
-                .font(OmoiFont.label(size: 11))
-                .foregroundStyle(Color.omoiMuted)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.omoiDarkGray)
+            HStack {
+                Text("BY APP")
+                    .font(OmoiFont.label(size: 11))
+                    .foregroundStyle(Color.omoiMuted)
 
-            // App rows with both words and WPM
-            ForEach(Array(statsManager.statsByApp.prefix(5).enumerated()), id: \.offset) { index, appData in
+                Spacer()
+
+                // Legend
+                HStack(spacing: 8) {
+                    HStack(spacing: 3) {
+                        Circle().fill(Color.omoiOrange).frame(width: 6, height: 6)
+                        Text("VOICE").font(OmoiFont.label(size: 8)).foregroundStyle(Color.omoiMuted)
+                    }
+                    HStack(spacing: 3) {
+                        Circle().fill(Color.omoiTeal).frame(width: 6, height: 6)
+                        Text("TYPED").font(OmoiFont.label(size: 8)).foregroundStyle(Color.omoiMuted)
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(Color.omoiDarkGray)
+
+            // App rows with voice + typed breakdown
+            ForEach(Array(allAppStats.prefix(5).enumerated()), id: \.offset) { index, appData in
                 HStack(spacing: 12) {
                     // Rank indicator
                     Text("\(index + 1)")
@@ -403,20 +846,25 @@ struct DashboardView: View {
 
                     Spacer()
 
-                    // Total words
+                    // Voice words
                     HStack(spacing: 4) {
-                        Text(formatWordCount(appData.totalWords))
-                            .font(OmoiFont.mono(size: 16))
-                            .foregroundStyle(Color.omoiTeal)
-                        Text("WORDS")
-                            .font(OmoiFont.label(size: 9))
-                            .foregroundStyle(Color.omoiMuted)
+                        Text(formatWordCount(appData.voiceWords))
+                            .font(OmoiFont.mono(size: 14))
+                            .foregroundStyle(Color.omoiOrange)
                     }
-                    .frame(width: 100, alignment: .trailing)
+                    .frame(width: 55, alignment: .trailing)
 
-                    // Average WPM
+                    // Typed words
                     HStack(spacing: 4) {
-                        Text("\(Int(appData.avgWPM))")
+                        Text(formatWordCount(appData.typedWords))
+                            .font(OmoiFont.mono(size: 14))
+                            .foregroundStyle(Color.omoiTeal)
+                    }
+                    .frame(width: 55, alignment: .trailing)
+
+                    // Total / WPM
+                    HStack(spacing: 4) {
+                        Text("\(Int(appData.avgWpm))")
                             .font(OmoiFont.mono(size: 16))
                             .foregroundStyle(Color.omoiOffWhite)
                         Text("WPM")
@@ -438,6 +886,90 @@ struct DashboardView: View {
         }
     }
 
+    // MARK: - Filtered Sessions
+
+    private var filteredVoiceSessions: [TranscriptionSession] {
+        switch selectedTimeRange {
+        case .today:
+            return statsManager.sessions.filter { Calendar.current.isDateInToday($0.timestamp) }
+        case .week:
+            guard let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) else {
+                return statsManager.sessions
+            }
+            return statsManager.sessions.filter { $0.timestamp >= weekAgo }
+        case .allTime:
+            return statsManager.sessions
+        }
+    }
+
+    private var filteredTypingSessions: [TypingSession] {
+        switch selectedTimeRange {
+        case .today:
+            return statsManager.typingSessions.filter { Calendar.current.isDateInToday($0.timestamp) }
+        case .week:
+            guard let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) else {
+                return statsManager.typingSessions
+            }
+            return statsManager.typingSessions.filter { $0.timestamp >= weekAgo }
+        case .allTime:
+            return statsManager.typingSessions
+        }
+    }
+
+    private var filteredPeakHour: (hour: Int, words: Int)? {
+        let calendar = Calendar.current
+        var hourlyWords: [Int: Int] = [:]
+
+        for session in filteredVoiceSessions {
+            let hour = calendar.component(.hour, from: session.timestamp)
+            hourlyWords[hour, default: 0] += session.wordCount
+        }
+
+        for session in filteredTypingSessions {
+            let hour = calendar.component(.hour, from: session.timestamp)
+            hourlyWords[hour, default: 0] += session.wordCount
+        }
+
+        guard let peak = hourlyWords.max(by: { $0.value < $1.value }) else { return nil }
+        return (hour: peak.key, words: peak.value)
+    }
+
+    /// Combined voice + typed stats per app
+    private var allAppStats: [(appName: String, voiceWords: Int, typedWords: Int, avgWpm: Double)] {
+        // Voice stats by app
+        let voiceGroups = Dictionary(grouping: filteredVoiceSessions) { $0.targetAppName ?? "Unknown" }
+        var voiceByApp: [String: (words: Int, duration: TimeInterval)] = [:]
+        for (app, sessions) in voiceGroups {
+            let words = sessions.reduce(0) { $0 + $1.wordCount }
+            let duration = sessions.reduce(0.0) { $0 + $1.effectiveDuration }
+            voiceByApp[app] = (words, duration)
+        }
+
+        // Typed stats by app
+        let typedGroups = Dictionary(grouping: filteredTypingSessions) { $0.appName }
+        var typedByApp: [String: (words: Int, duration: TimeInterval)] = [:]
+        for (app, sessions) in typedGroups {
+            let words = sessions.reduce(0) { $0 + $1.wordCount }
+            let duration = sessions.reduce(0.0) { $0 + $1.duration }
+            typedByApp[app] = (words, duration)
+        }
+
+        // Merge all apps
+        var allApps = Set(voiceByApp.keys)
+        allApps.formUnion(typedByApp.keys)
+
+        return allApps.compactMap { appName -> (appName: String, voiceWords: Int, typedWords: Int, avgWpm: Double)? in
+            let v = voiceByApp[appName] ?? (0, 0)
+            let t = typedByApp[appName] ?? (0, 0)
+            let totalWords = v.words + t.words
+            let totalDuration = v.duration + t.duration
+            guard totalDuration > 0.1 else { return nil }
+            let avgWpm = Double(totalWords) / (totalDuration / 60.0)
+            return (appName: appName, voiceWords: v.words, typedWords: t.words,
+                    avgWpm: avgWpm.isFinite ? avgWpm : 0)
+        }.sorted { $0.voiceWords + $0.typedWords > $1.voiceWords + $1.typedWords }
+    }
+
     private func formatWordCount(_ count: Int) -> String {
         if count >= 1000 {
             return String(format: "%.1fK", Double(count) / 1000.0)
@@ -445,289 +977,120 @@ struct DashboardView: View {
         return "\(count)"
     }
 
-    // MARK: - Goals Progress Section
-    @ViewBuilder
-    private var goalsProgressSection: some View {
+    // MARK: - LLM Insights Block
+
+    private var insightsBlock: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Section header
+            // Header with regenerate button
             HStack {
-                Text("GOALS")
+                Text("INSIGHTS")
                     .font(OmoiFont.label(size: 11))
                     .foregroundStyle(Color.omoiMuted)
 
                 Spacer()
 
-                if statsManager.goals.filter({ $0.isActive }).count < 3 {
-                    Button(action: { showingGoalSetup = true }) {
-                        Text("+ ADD")
-                            .font(OmoiFont.label(size: 11))
-                            .foregroundStyle(Color.omoiTeal)
+                Button(action: { generateInsights() }) {
+                    HStack(spacing: 4) {
+                        if isLoadingInsights {
+                            ProgressView()
+                                .scaleEffect(0.5)
+                                .frame(width: 12, height: 12)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 10))
+                        }
+                        Text(isLoadingInsights ? "THINKING" : "REGENERATE")
+                            .font(OmoiFont.label(size: 10))
                     }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-            .background(Color.omoiDarkGray)
-
-            if statsManager.goals.filter({ $0.isActive }).isEmpty {
-                // Empty state - brutalist
-                VStack(spacing: 12) {
-                    Text("—")
-                        .font(OmoiFont.stat)
-                        .foregroundStyle(Color.omoiGray)
-
-                    Text("Set goals to track progress")
-                        .font(OmoiFont.body(size: 12))
-                        .foregroundStyle(Color.omoiMuted)
-
-                    Button(action: { showingGoalSetup = true }) {
-                        Text("CREATE GOAL")
-                            .font(OmoiFont.label(size: 11))
-                            .foregroundStyle(Color.omoiBlack)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(Color.omoiTeal)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 24)
-                .background(Color.omoiDarkGray)
-                .overlay(
-                    Rectangle()
-                        .frame(height: 1)
-                        .foregroundStyle(Color.omoiGray),
-                    alignment: .top
-                )
-            } else {
-                ForEach(statsManager.goals.filter { $0.isActive }) { goal in
-                    GoalCard(goal: goal, statsManager: statsManager, onEdit: {
-                        showingGoalSetup = true
-                    }, onDelete: {
-                        statsManager.deleteGoal(goal.id)
-                    })
-                }
-            }
-        }
-    }
-
-    // MARK: - Performance Insights Section
-    @ViewBuilder
-    private var performanceInsightsSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Section header
-            Text("INSIGHTS")
-                .font(OmoiFont.label(size: 11))
-                .foregroundStyle(Color.omoiMuted)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.omoiDarkGray)
-
-            ForEach(statsManager.performanceInsights) { insight in
-                InsightCard(insight: insight)
-            }
-        }
-    }
-
-    // MARK: - Week Comparison Section
-    @ViewBuilder
-    private var weekComparisonSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Section header
-            Text("WEEK vs WEEK")
-                .font(OmoiFont.label(size: 11))
-                .foregroundStyle(Color.omoiMuted)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.omoiDarkGray)
-
-            Chart {
-                ForEach(statsManager.weekOverWeekComparison, id: \.day) { data in
-                    BarMark(
-                        x: .value("Day", data.day),
-                        y: .value("Words", data.thisWeek),
-                        width: 8
-                    )
-                    .position(by: .value("Week", "This Week"))
                     .foregroundStyle(Color.omoiTeal)
-
-                    BarMark(
-                        x: .value("Day", data.day),
-                        y: .value("Words", data.lastWeek),
-                        width: 8
-                    )
-                    .position(by: .value("Week", "Last Week"))
-                    .foregroundStyle(Color.omoiGray)
-                }
-            }
-            .chartXAxis {
-                AxisMarks { _ in
-                    AxisValueLabel()
-                        .foregroundStyle(Color.omoiMuted)
-                }
-            }
-            .chartYAxis {
-                AxisMarks { _ in
-                    AxisGridLine()
-                        .foregroundStyle(Color.omoiGray.opacity(0.5))
-                    AxisValueLabel()
-                        .foregroundStyle(Color.omoiMuted)
-                }
-            }
-            .frame(height: 160)
-            .padding(20)
-            .background(Color.omoiDarkGray)
-
-            // Comparison insight
-            Text(weekComparisonInsight())
-                .font(OmoiFont.body(size: 12))
-                .foregroundStyle(Color.omoiMuted)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.omoiDarkGray)
-                .overlay(
-                    Rectangle()
-                        .frame(height: 1)
-                        .foregroundStyle(Color.omoiGray),
-                    alignment: .top
-                )
-        }
-    }
-
-    // MARK: - Chart Section
-    @ViewBuilder
-    private var chartSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Section header with controls
-            HStack {
-                Text("PACE")
-                    .font(OmoiFont.label(size: 11))
-                    .foregroundStyle(Color.omoiMuted)
-
-                Spacer()
-
-                // Trend toggle
-                Button(action: { showTrendLine.toggle() }) {
-                    Text("TREND")
-                        .font(OmoiFont.label(size: 10))
-                        .foregroundStyle(showTrendLine ? Color.omoiOrange : Color.omoiGray)
                 }
                 .buttonStyle(.plain)
-
-                // Metric picker - brutalist style
-                HStack(spacing: 0) {
-                    ForEach(ChartMetric.allCases, id: \.self) { metric in
-                        Button(action: { selectedChartMetric = metric }) {
-                            Text(metric.rawValue.uppercased())
-                                .font(OmoiFont.label(size: 10))
-                                .foregroundStyle(selectedChartMetric == metric ? Color.omoiBlack : Color.omoiMuted)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(selectedChartMetric == metric ? Color.omoiTeal : Color.clear)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .background(Color.omoiGray)
+                .disabled(isLoadingInsights)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
             .background(Color.omoiDarkGray)
 
-            // Chart
-            Chart {
-                if selectedChartMetric == .words {
-                    ForEach(Array(statsManager.wordsPerDay.enumerated()), id: \.offset) { index, data in
-                        BarMark(
-                            x: .value("Day", dayLabel(for: data.date)),
-                            y: .value("Words", data.words)
-                        )
-                        .foregroundStyle(data.words > 1000 ? Color.omoiTeal : Color.omoiTeal.opacity(0.6))
-                    }
+            // Insight bullets
+            if llmInsights.isEmpty && !isLoadingInsights {
+                Text("Tap regenerate to get AI-powered insights about your patterns.")
+                    .font(OmoiFont.body(size: 12))
+                    .foregroundStyle(Color.omoiMuted)
+                    .padding(20)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.omoiDarkGray)
+            } else {
+                ForEach(Array(llmInsights.enumerated()), id: \.offset) { index, insight in
+                    HStack(alignment: .top, spacing: 12) {
+                        Circle()
+                            .fill(bulletColor(for: index))
+                            .frame(width: 6, height: 6)
+                            .padding(.top, 6)
 
-                    // Trend line overlay
-                    if showTrendLine && !statsManager.wordsMovingAverage.isEmpty {
-                        ForEach(Array(statsManager.wordsMovingAverage.enumerated()), id: \.offset) { index, data in
-                            LineMark(
-                                x: .value("Day", dayLabel(for: data.date)),
-                                y: .value("Trend", data.average)
-                            )
-                            .foregroundStyle(Color.omoiOrange)
-                            .lineStyle(StrokeStyle(lineWidth: 2))
-                        }
+                        Text(insight)
+                            .font(OmoiFont.body(size: 12))
+                            .foregroundStyle(Color.omoiOffWhite)
+                            .lineLimit(3)
                     }
-                } else {
-                    ForEach(Array(statsManager.wpmPerDay.enumerated()), id: \.offset) { index, data in
-                        BarMark(
-                            x: .value("Day", dayLabel(for: data.date)),
-                            y: .value("WPM", data.wpm)
-                        )
-                        .foregroundStyle(data.wpm > 150 ? Color.omoiTeal : Color.omoiTeal.opacity(0.6))
-                    }
-
-                    // Trend line overlay
-                    if showTrendLine && !statsManager.wpmMovingAverage.isEmpty {
-                        ForEach(Array(statsManager.wpmMovingAverage.enumerated()), id: \.offset) { index, data in
-                            LineMark(
-                                x: .value("Day", dayLabel(for: data.date)),
-                                y: .value("Trend", data.average)
-                            )
-                            .foregroundStyle(Color.omoiOrange)
-                            .lineStyle(StrokeStyle(lineWidth: 2))
-                        }
-                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 8)
+                    .background(Color.omoiDarkGray)
+                    .overlay(
+                        Rectangle()
+                            .frame(height: 1)
+                            .foregroundStyle(Color.omoiGray.opacity(0.3)),
+                        alignment: .top
+                    )
                 }
             }
-            .chartXAxis {
-                AxisMarks { _ in
-                    AxisValueLabel()
-                        .foregroundStyle(Color.omoiMuted)
-                }
-            }
-            .chartYAxis {
-                AxisMarks { _ in
-                    AxisGridLine()
-                        .foregroundStyle(Color.omoiGray.opacity(0.5))
-                    AxisValueLabel()
-                        .foregroundStyle(Color.omoiMuted)
-                }
-            }
-            .frame(height: 180)
-            .chartAngleSelection(value: $selectedDate)
-            .onChange(of: selectedDate) { oldValue, newValue in
-                if newValue != nil {
-                    showingDetailModal = true
-                }
-            }
-            .padding(20)
-            .background(Color.omoiDarkGray)
-
-            // Chart insight
-            Text(chartInsight())
-                .font(OmoiFont.body(size: 12))
-                .foregroundStyle(Color.omoiMuted)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.omoiDarkGray)
-                .overlay(
-                    Rectangle()
-                        .frame(height: 1)
-                        .foregroundStyle(Color.omoiGray),
-                    alignment: .top
-                )
         }
     }
 
-    // MARK: - Helper: Stat Card with Trend (Brutalist)
+    private func bulletColor(for index: Int) -> Color {
+        let colors: [Color] = [.omoiTeal, .omoiOrange, .omoiPurple, .omoiGreen]
+        return colors[index % colors.count]
+    }
+
+    private func generateInsights() {
+        isLoadingInsights = true
+
+        Task {
+            let voiceWords = thisWeekVoiceWords()
+            let typedWords = thisWeekTypedWords()
+            let totalWords = voiceWords + typedWords
+            let topApps = allAppStats.prefix(5).map { "\($0.appName): \($0.voiceWords + $0.typedWords) words" }.joined(separator: ", ")
+            let kbStats = statsManager.wpmByKeyboard.map { "\($0.keyboard.displayName) at \(Int($0.avgWpm)) WPM" }.joined(separator: ", ")
+            let voiceWpm = statsManager.averageWPM
+            let lastWeek = lastWeekWords()
+            let weekChange = lastWeek > 0 ? Int((Double(thisWeekWords() - lastWeek) / Double(lastWeek)) * 100) : 0
+
+            let prompt = """
+            You are a concise productivity analyst. Given this week's data, produce exactly 4 bullet points. Each bullet is ONE sentence, max 20 words. No emojis. Be specific with numbers, apps, keyboards, or patterns.
+
+            Cover: 1) Volume pattern 2) Speed observation 3) App focus 4) Trend or anomaly
+
+            DATA:
+            This week: \(totalWords) words (\(voiceWords) voice, \(typedWords) typed)
+            Week-over-week: \(weekChange > 0 ? "+" : "")\(weekChange)% vs last week (\(lastWeek) words)
+            Voice WPM: \(Int(voiceWpm))
+            \(kbStats.isEmpty ? "No keyboard data yet" : "Keyboards: " + kbStats)
+            Top apps: \(topApps.isEmpty ? "No app data yet" : topApps)
+            Peak hour: \(filteredPeakHour.map { formatHour($0.hour) } ?? "unknown")
+
+            Return ONLY 4 lines, one per bullet. No numbering, no dashes, no prefixes.
+            """
+
+            llmInsights = await OllamaService.shared.generateInsightBullets(context: prompt)
+            isLoadingInsights = false
+        }
+    }
+
+    // MARK: - Helper: Stat Card with Split (Brutalist)
     @ViewBuilder
-    private func statCardWithTrend(
+    private func statCardWithSplit(
         title: String,
         value: String,
+        subtitle: String? = nil,
         icon: String,
         trend: String?,
         trendText: String?
@@ -753,6 +1116,14 @@ struct DashboardView: View {
                 .font(OmoiFont.stat)
                 .foregroundStyle(Color.omoiWhite)
 
+            // Subtitle (voice / typed split)
+            if let subtitle = subtitle, !subtitle.isEmpty {
+                Text(subtitle)
+                    .font(OmoiFont.caption)
+                    .foregroundStyle(Color.omoiMuted)
+                    .lineLimit(1)
+            }
+
             // Trend text if present
             if let trendText = trendText {
                 Text(trendText)
@@ -765,43 +1136,43 @@ struct DashboardView: View {
         .background(Color.omoiDarkGray)
     }
 
-    // MARK: - Premium Copy & Narrative Logic
+    // MARK: - Helper: Stat Card with Trend (Brutalist)
+    @ViewBuilder
+    private func statCardWithTrend(
+        title: String,
+        value: String,
+        icon: String,
+        trend: String?,
+        trendText: String?
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title)
+                    .font(OmoiFont.label(size: 11))
+                    .foregroundStyle(Color.omoiMuted)
 
-    private func weeklyNarrativeTitle() -> String {
-        let thisWeek = thisWeekWords()
-        let lastWeek = lastWeekWords()
+                Spacer()
 
-        if thisWeek == 0 {
-            return "Ready to capture"
+                if let trend = trend {
+                    Image(systemName: trend)
+                        .font(.system(size: 10))
+                        .foregroundStyle(trend == "arrow.up.right" ? Color.omoiGreen : Color.omoiOrange)
+                }
+            }
+
+            Text(value)
+                .font(OmoiFont.stat)
+                .foregroundStyle(Color.omoiWhite)
+
+            if let trendText = trendText {
+                Text(trendText)
+                    .font(OmoiFont.caption)
+                    .foregroundStyle(Color.omoiMuted)
+            }
         }
-
-        if thisWeek > lastWeek && lastWeek > 0 {
-            let percentIncrease = Int((Double(thisWeek - lastWeek) / Double(lastWeek)) * 100)
-            return "You're on fire! 📈"
-        }
-
-        return "Great progress"
-    }
-
-    private func weeklyNarrativeSubtitle() -> String {
-        let thisWeek = thisWeekWords()
-        let lastWeek = lastWeekWords()
-        let appCount = statsManager.topApps.count
-
-        if thisWeek == 0 {
-            return "Start recording to see your story unfold."
-        }
-
-        // Base message - always concise
-        let baseMessage = "\(formatNumber(thisWeek)) words across \(appCount) app\(appCount == 1 ? "" : "s") this week"
-
-        // Add trend if available (keep it short)
-        if thisWeek > lastWeek && lastWeek > 0 {
-            let percentIncrease = Int((Double(thisWeek - lastWeek) / Double(lastWeek)) * 100)
-            return "\(baseMessage). Up \(percentIncrease)% from last week!"
-        }
-
-        return baseMessage + "."
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(Color.omoiDarkGray)
     }
 
     private func trendForTotalWords() -> String? {
@@ -838,30 +1209,28 @@ struct DashboardView: View {
         return "vs last week"
     }
 
-    private func chartInsight() -> String {
-        if selectedChartMetric == .words {
-            guard let maxDay = statsManager.wordsPerDay.max(by: { $0.words < $1.words }) else {
-                return "Start recording to see your pace."
-            }
-            let dayName = dayLabel(for: maxDay.date)
-            return "Best day: \(maxDay.words) words on \(dayName)"
-        } else {
-            guard let maxDay = statsManager.wpmPerDay.max(by: { $0.wpm < $1.wpm }) else {
-                return "Start recording to see your pace."
-            }
-            let dayName = dayLabel(for: maxDay.date)
-            return "Fastest pace: \(Int(maxDay.wpm)) WPM on \(dayName)"
-        }
-    }
-
     // MARK: - Utilities
 
     private func thisWeekWords() -> Int {
+        thisWeekVoiceWords() + thisWeekTypedWords()
+    }
+
+    private func thisWeekVoiceWords() -> Int {
         let calendar = Calendar.current
         let now = Date()
         let weekAgo = calendar.date(byAdding: .day, value: -7, to: now) ?? now
 
         return statsManager.sessions
+            .filter { $0.timestamp >= weekAgo }
+            .reduce(0) { $0 + $1.wordCount }
+    }
+
+    private func thisWeekTypedWords() -> Int {
+        let calendar = Calendar.current
+        let now = Date()
+        let weekAgo = calendar.date(byAdding: .day, value: -7, to: now) ?? now
+
+        return statsManager.typingSessions
             .filter { $0.timestamp >= weekAgo }
             .reduce(0) { $0 + $1.wordCount }
     }
@@ -1493,225 +1862,6 @@ struct GoalCard: View {
                 }
             }
         }
-    }
-}
-
-struct InsightCard: View {
-    let insight: PerformanceInsight
-
-    private var accentColor: Color {
-        switch insight.type {
-        case .timing: return Color.omoiTeal
-        case .speed: return Color.omoiTealLight
-        case .habit: return Color.omoiGreen
-        case .milestone: return Color.omoiOrange
-        }
-    }
-
-    var body: some View {
-        HStack(spacing: 12) {
-            // Icon block
-            Rectangle()
-                .fill(accentColor)
-                .frame(width: 4)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(insight.title.uppercased())
-                    .font(OmoiFont.label(size: 11))
-                    .foregroundStyle(Color.omoiWhite)
-
-                Text(insight.message)
-                    .font(OmoiFont.body(size: 12))
-                    .foregroundStyle(Color.omoiMuted)
-                    .lineLimit(3)
-            }
-
-            Spacer()
-        }
-        .padding(16)
-        .background(Color.omoiDarkGray)
-        .overlay(
-            Rectangle()
-                .frame(height: 1)
-                .foregroundStyle(Color.omoiGray),
-            alignment: .top
-        )
-    }
-}
-
-struct GoalSetupSheet: View {
-    @ObservedObject var statsManager: StatsManager
-    @Binding var isPresented: Bool
-
-    @State private var selectedType: UserGoal.GoalType = .wordCount
-    @State private var selectedPeriod: UserGoal.GoalPeriod = .daily
-    @State private var targetValue: String = "1000"
-    @State private var editingGoal: UserGoal?
-
-    var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            HStack {
-                Text("NEW GOAL")
-                    .font(OmoiFont.heading(size: 18))
-                    .foregroundStyle(Color.omoiWhite)
-
-                Spacer()
-
-                Button(action: { isPresented = false }) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(Color.omoiMuted)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(20)
-            .background(Color.omoiDarkGray)
-
-            // Goal Type
-            VStack(alignment: .leading, spacing: 8) {
-                Text("TYPE")
-                    .font(OmoiFont.label(size: 10))
-                    .foregroundStyle(Color.omoiMuted)
-
-                HStack(spacing: 1) {
-                    ForEach(UserGoal.GoalType.allCases, id: \.self) { type in
-                        Button(action: { selectedType = type }) {
-                            Text(type.rawValue.uppercased())
-                                .font(OmoiFont.label(size: 10))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 10)
-                                .background(selectedType == type ? Color.omoiTeal : Color.omoiGray)
-                                .foregroundStyle(selectedType == type ? Color.omoiBlack : Color.omoiLightGray)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-            .padding(20)
-            .background(Color.omoiDarkGray)
-            .overlay(
-                Rectangle()
-                    .frame(height: 1)
-                    .foregroundStyle(Color.omoiGray),
-                alignment: .top
-            )
-
-            // Period
-            VStack(alignment: .leading, spacing: 8) {
-                Text("PERIOD")
-                    .font(OmoiFont.label(size: 10))
-                    .foregroundStyle(Color.omoiMuted)
-
-                HStack(spacing: 1) {
-                    ForEach(UserGoal.GoalPeriod.allCases, id: \.self) { period in
-                        Button(action: { selectedPeriod = period }) {
-                            Text(period.rawValue.uppercased())
-                                .font(OmoiFont.label(size: 10))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 10)
-                                .background(selectedPeriod == period ? Color.omoiTeal : Color.omoiGray)
-                                .foregroundStyle(selectedPeriod == period ? Color.omoiBlack : Color.omoiLightGray)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-            .padding(20)
-            .background(Color.omoiDarkGray)
-            .overlay(
-                Rectangle()
-                    .frame(height: 1)
-                    .foregroundStyle(Color.omoiGray),
-                alignment: .top
-            )
-
-            // Target
-            VStack(alignment: .leading, spacing: 8) {
-                Text("TARGET")
-                    .font(OmoiFont.label(size: 10))
-                    .foregroundStyle(Color.omoiMuted)
-
-                HStack(spacing: 12) {
-                    TextField("", text: $targetValue)
-                        .font(OmoiFont.stat)
-                        .textFieldStyle(.plain)
-                        .foregroundStyle(Color.omoiWhite)
-                        .frame(width: 120)
-
-                    Text(targetUnit.uppercased())
-                        .font(OmoiFont.label(size: 11))
-                        .foregroundStyle(Color.omoiMuted)
-
-                    Spacer()
-                }
-            }
-            .padding(20)
-            .background(Color.omoiDarkGray)
-            .overlay(
-                Rectangle()
-                    .frame(height: 1)
-                    .foregroundStyle(Color.omoiGray),
-                alignment: .top
-            )
-
-            Spacer()
-
-            // Actions
-            HStack(spacing: 12) {
-                Button(action: { isPresented = false }) {
-                    Text("CANCEL")
-                        .font(OmoiFont.label(size: 12))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(Color.omoiGray)
-                        .foregroundStyle(Color.omoiLightGray)
-                }
-                .buttonStyle(.plain)
-
-                Button(action: { saveGoal() }) {
-                    Text("SAVE")
-                        .font(OmoiFont.label(size: 12))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(targetValue.isEmpty || Int(targetValue) == nil ? Color.omoiGray : Color.omoiTeal)
-                        .foregroundStyle(targetValue.isEmpty || Int(targetValue) == nil ? Color.omoiMuted : Color.omoiBlack)
-                }
-                .buttonStyle(.plain)
-                .disabled(targetValue.isEmpty || Int(targetValue) == nil)
-            }
-            .padding(20)
-            .background(Color.omoiDarkGray)
-            .overlay(
-                Rectangle()
-                    .frame(height: 1)
-                    .foregroundStyle(Color.omoiGray),
-                alignment: .top
-            )
-        }
-        .background(Color.omoiBlack)
-        .frame(width: 400, height: 420)
-    }
-
-    private var targetUnit: String {
-        switch selectedType {
-        case .wordCount: return "words"
-        case .sessionCount: return "sessions"
-        case .streak: return "days"
-        }
-    }
-
-    private func saveGoal() {
-        guard let target = Int(targetValue) else { return }
-
-        let newGoal = UserGoal(
-            type: selectedType,
-            target: target,
-            period: selectedPeriod
-        )
-
-        statsManager.addGoal(newGoal)
-        isPresented = false
     }
 }
 

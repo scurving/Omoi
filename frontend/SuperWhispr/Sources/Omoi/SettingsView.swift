@@ -30,6 +30,57 @@ struct SettingsView: View {
                     .padding(20)
                     .background(Color.omoiDarkGray)
 
+                // Startup Section
+                settingsSection(title: "STARTUP") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("AUTO-RESTART")
+                                    .font(OmoiFont.label(size: 11))
+                                    .foregroundStyle(Color.omoiMuted)
+                                Text("Launch at login and restart if killed")
+                                    .font(OmoiFont.caption)
+                                    .foregroundStyle(Color.omoiMuted)
+                            }
+
+                            Spacer()
+
+                            Toggle("", isOn: Binding(
+                                get: { LaunchAgentManager.shared.isInstalled },
+                                set: { enable in
+                                    if enable {
+                                        do {
+                                            try LaunchAgentManager.shared.install()
+                                            statusMessage = "Auto-restart enabled"
+                                        } catch {
+                                            statusMessage = "Failed: \(error.localizedDescription)"
+                                        }
+                                    } else {
+                                        do {
+                                            try LaunchAgentManager.shared.uninstall()
+                                            statusMessage = "Auto-restart disabled"
+                                        } catch {
+                                            statusMessage = "Failed: \(error.localizedDescription)"
+                                        }
+                                    }
+                                }
+                            ))
+                            .toggleStyle(.switch)
+                            .tint(Color.omoiTeal)
+                        }
+
+                        if LaunchAgentManager.shared.isInstalled {
+                            HStack {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(Color.omoiGreen)
+                                Text("Omoi will automatically restart if closed or killed")
+                                    .font(OmoiFont.caption)
+                                    .foregroundStyle(Color.omoiGreen)
+                            }
+                        }
+                    }
+                }
+
                 // Keyboard Shortcuts Section
                 settingsSection(title: "KEYBOARD") {
                     VStack(alignment: .leading, spacing: 12) {

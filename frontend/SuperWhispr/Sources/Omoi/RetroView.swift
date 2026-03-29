@@ -8,6 +8,7 @@ struct RetroView: View {
     @State private var isGenerating = false
     @State private var errorMessage: String?
     @State private var showSaveSuccess = false
+    @State private var showPipelineConfig = false
     
     var body: some View {
         VStack(spacing: 0) {
@@ -19,9 +20,19 @@ struct RetroView: View {
                 
                 Spacer()
                 
-                DatePicker("", selection: $selectedDate, displayedComponents: .date)
-                    .labelsHidden()
-                    .colorScheme(.dark)
+                CustomDatePicker(selection: $selectedDate)
+                    .frame(width: 200)
+                
+                Button(action: { showPipelineConfig = true }) {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color.omoiMuted)
+                        .padding(8)
+                        .background(Color.omoiDarkGray)
+                        .overlay(Rectangle().stroke(Color.omoiGray, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .help("Configure Analysis Pipeline")
             }
             .padding(16)
             .background(Color.omoiDarkGray)
@@ -126,13 +137,43 @@ struct RetroView: View {
             }
         }
         .background(Color.omoiBlack)
-        .onChange(of: selectedDate) { _ in
-            analysisText = ""
-            errorMessage = nil
+        .onChange(of: selectedDate) { newDate in
+            loadSavedAnalysis(for: newDate)
+        }
+        .onAppear {
+            loadSavedAnalysis(for: selectedDate)
+        }
+        .sheet(isPresented: $showPipelineConfig) {
+            VStack(spacing: 0) {
+                HStack {
+                    Text("CONFIGURE PIPELINE")
+                        .font(OmoiFont.label(size: 12))
+                        .foregroundStyle(Color.omoiMuted)
+                    Spacer()
+                    Button("Done") { showPipelineConfig = false }
+                        .buttonStyle(.plain)
+                        .font(OmoiFont.label(size: 12))
+                        .foregroundStyle(Color.omoiTeal)
+                }
+                .padding(16)
+                .background(Color.omoiDarkGray)
+                
+                PipelinesView(statsManager: statsManager)
+            }
+            .frame(width: 500, height: 600)
         }
     }
     
     // MARK: - Actions
+    
+    private func loadSavedAnalysis(for date: Date) {
+        if let saved = statsManager.loadRetrospective(for: date) {
+            analysisText = saved
+        } else {
+            analysisText = ""
+        }
+        errorMessage = nil
+    }
     
     private func generateAnalysis() {
         let sessions = statsManager.sessions(for: selectedDate)
@@ -141,12 +182,21 @@ struct RetroView: View {
         isGenerating = true
         errorMessage = nil
         
+        // Get custom prompt from manager
+        let customPrompt = SanitizationManager.shared.retrospectivePrompt
+        
         Task {
             do {
-                let result = try await OllamaService.shared.generateRetrospective(sessions: sessions)
+                let result = try await OllamaService.shared.generateRetrospective(
+                    sessions: sessions,
+                    customPrompt: customPrompt.isEmpty ? nil : customPrompt
+                )
+                
                 await MainActor.run {
                     self.analysisText = result
                     self.isGenerating = false
+                    // Auto-save on success
+                    self.statsManager.saveRetrospective(result, for: selectedDate)
                 }
             } catch {
                 await MainActor.run {
