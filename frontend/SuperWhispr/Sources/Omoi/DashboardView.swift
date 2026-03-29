@@ -179,7 +179,7 @@ struct DashboardView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(color.opacity(0.1))
+        .background(Color.omoiGray)
     }
 
     // MARK: - Activity Heatmap

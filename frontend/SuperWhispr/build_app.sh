@@ -82,6 +82,13 @@ mkdir -p "$APP_BUNDLE/Contents/Resources"
 # 3. Copy the executable
 cp "$BUILD_DIR/$APP_NAME" "$APP_BUNDLE/Contents/MacOS/"
 
+# 3b. Copy app icon
+ICON_SOURCE="Sources/Omoi/Resources/AppIcon.icns"
+if [ -f "$ICON_SOURCE" ]; then
+    cp "$ICON_SOURCE" "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
+    echo "   ✅ App icon copied"
+fi
+
 # 4. Create/Process Info.plist
 # We need to manually replace variables since we aren't using Xcode
 sed -e "s/\$(EXECUTABLE_NAME)/$APP_NAME/" \

@@ -212,16 +212,16 @@ struct PipelinesView: View {
                             .font(OmoiFont.label(size: 10))
                             .foregroundStyle(Color.omoiMuted)
                         Spacer()
-                        if !sanitizationManager.rules.instructions.isEmpty {
-                            Button(action: { showSavePresetSheet = true }) {
-                                Text("SAVE AS PRESET")
-                                    .font(OmoiFont.label(size: 10))
-                                    .foregroundStyle(Color.omoiTeal)
-                            }
-                            .buttonStyle(.plain)
+                        Button(action: { showSavePresetSheet = true }) {
+                            Text("SAVE AS PRESET")
+                                .font(OmoiFont.label(size: 10))
+                                .foregroundStyle(Color.omoiTeal)
                         }
+                        .buttonStyle(.plain)
+                        .disabled(sanitizationManager.rules.instructions.isEmpty)
+                        .opacity(sanitizationManager.rules.instructions.isEmpty ? 0.3 : 1.0)
                     }
-                    
+
                     TextEditor(text: $sanitizationManager.rules.instructions)
                         .font(OmoiFont.body(size: 13))
                         .scrollContentBackground(.hidden)
@@ -231,6 +231,15 @@ struct PipelinesView: View {
                         .overlay(Rectangle().stroke(Color.omoiGray, lineWidth: 1))
                         .disabled(!sanitizationManager.rules.enabled)
                         .opacity(sanitizationManager.rules.enabled ? 1 : 0.5)
+                        .overlay(alignment: .topLeading) {
+                            if sanitizationManager.rules.instructions.isEmpty {
+                                Text("Type here to create new preset...")
+                                    .font(OmoiFont.body(size: 13))
+                                    .foregroundStyle(Color.omoiMuted.opacity(0.5))
+                                    .padding(8)
+                                    .allowsHitTesting(false)
+                            }
+                        }
                 }
             }
             .padding(20)

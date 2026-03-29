@@ -20,7 +20,7 @@ let package = Package(
             dependencies: [
                 "KeyboardShortcuts"
             ],
-            exclude: ["Info.plist"],
+            exclude: ["Info.plist", "Resources/Omoi.plist"],
             resources: [
                 .process("Resources/Assets.xcassets")
             ]
