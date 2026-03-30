@@ -109,7 +109,15 @@ extension DashboardView {
     }
 
     func filteredTypedWords() -> Int {
-        filteredTypingSessions.reduce(0) { $0 + $1.wordCount }
+        let storage = EncryptedStorageManager.shared.typingStorage
+        switch selectedTimeRange {
+        case .today:
+            return storage.dailyTypedWords(lastDays: 1).first?.words ?? 0
+        case .week:
+            return storage.dailyTypedWords(lastDays: 7).reduce(0) { $0 + $1.words }
+        case .allTime:
+            return storage.dailyTypedWords(lastDays: 365).reduce(0) { $0 + $1.words }
+        }
     }
 
     func presenceSubtitle() -> String {
