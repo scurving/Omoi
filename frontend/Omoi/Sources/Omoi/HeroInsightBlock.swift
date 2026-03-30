@@ -55,14 +55,14 @@ extension DashboardView {
                 // Left column
                 VStack(alignment: .leading, spacing: 24) {
                     presenceStat(label: "V O C A L   F L O W", value: formatNumber(filteredVoiceWords()), color: Color.omoiOrange)
-                    presenceStat(label: "C A D E N C E", value: "\(Int(statsManager.averageWPM))", unit: "WPM", color: Color.omoiOrange)
+                    presenceStat(label: "C A D E N C E", value: "\(Int(filteredVoiceWpm()))", unit: "WPM", color: Color.omoiOrange)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 // Right column
                 VStack(alignment: .leading, spacing: 24) {
                     presenceStat(label: "T A C T I L E   F O C U S", value: formatNumber(filteredTypedWords()), color: Color.omoiTeal)
-                    presenceStat(label: "P R E C I S I O N", value: "\(Int(typedAverageWpm()))", unit: "WPM", color: Color.omoiTeal)
+                    presenceStat(label: "P R E C I S I O N", value: "\(Int(filteredTypedWpm()))", unit: "WPM", color: Color.omoiTeal)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -98,10 +98,24 @@ extension DashboardView {
         }
     }
 
-    func typedAverageWpm() -> Double {
-        let kbWpm = statsManager.wpmByKeyboard
-        guard !kbWpm.isEmpty else { return 0 }
-        return kbWpm.reduce(0.0) { $0 + $1.avgWpm } / Double(kbWpm.count)
+    func filteredVoiceWpm() -> Double {
+        let sessions = filteredVoiceSessions.filter { $0.effectiveDuration > 0.1 }
+        guard !sessions.isEmpty else { return 0 }
+        let totalWords = sessions.reduce(0) { $0 + $1.wordCount }
+        let totalDuration = sessions.reduce(0.0) { $0 + $1.effectiveDuration }
+        guard totalDuration > 0 else { return 0 }
+        let wpm = Double(totalWords) / (totalDuration / 60.0)
+        return wpm.isFinite ? wpm : 0
+    }
+
+    func filteredTypedWpm() -> Double {
+        let sessions = filteredTypingSessions.filter { $0.duration > 0.1 }
+        guard !sessions.isEmpty else { return 0 }
+        let totalWords = sessions.reduce(0) { $0 + $1.wordCount }
+        let totalDuration = sessions.reduce(0.0) { $0 + $1.duration }
+        guard totalDuration > 0 else { return 0 }
+        let wpm = Double(totalWords) / (totalDuration / 60.0)
+        return wpm.isFinite ? wpm : 0
     }
 
     func filteredVoiceWords() -> Int {
