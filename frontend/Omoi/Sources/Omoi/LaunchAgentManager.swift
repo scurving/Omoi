@@ -29,9 +29,7 @@ class LaunchAgentManager {
             "Label": launchAgentLabel,
             "ProgramArguments": [executablePath],
             "RunAtLoad": true,
-            "KeepAlive": [
-                "SuccessfulExit": false
-            ],
+            "KeepAlive": true,
             "ThrottleInterval": 30,
             "ProcessType": "Interactive"
         ]
