@@ -22,18 +22,19 @@ struct MenuBarContentView: View {
             HStack {
                 Text("v\(Bundle.main.appVersionString)")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.omoiMuted)
                 Spacer()
                 Button(action: { NSApplication.shared.terminate(nil) }) {
                     Label("Quit", systemImage: "power")
                         .font(.caption)
                 }
                 .buttonStyle(.borderless)
-                .foregroundStyle(.red)
+                .foregroundStyle(Color.omoiOrange)
             }
             .padding(.horizontal)
             .padding(.bottom, 10)
         }
+        .background(Color.omoiBlack)
         .frame(width: 400, height: 500)
         .onAppear {
             viewModel.setupShortcutObserver()

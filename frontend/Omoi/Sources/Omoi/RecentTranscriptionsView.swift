@@ -11,10 +11,10 @@ struct RecentTranscriptionsView: View {
                     VStack(spacing: 8) {
                         Image(systemName: "clock.badge.questionmark")
                             .font(.system(size: 32))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.omoiMuted)
                         Text("No recent transcriptions")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.omoiMuted)
                     }
                     .frame(maxHeight: .infinity)
                 } else {
@@ -26,6 +26,7 @@ struct RecentTranscriptionsView: View {
             }
             .padding(.vertical, 8)
         }
+        .background(Color.omoiBlack)
     }
 }
 
@@ -44,14 +45,14 @@ struct CompactHistoryRow: View {
             } else {
                 Image(systemName: "app.dashed")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.omoiMuted)
             }
 
             // Truncated text (1 line)
             Text(session.text)
                 .lineLimit(1)
                 .font(.caption)
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.omoiOffWhite)
 
             Spacer()
 
@@ -60,13 +61,14 @@ struct CompactHistoryRow: View {
                 Button(action: { copyToClipboard(session.text) }) {
                     Image(systemName: "doc.on.doc")
                         .font(.caption2)
+                        .foregroundStyle(Color.omoiTeal)
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(.vertical, 4)
         .padding(.horizontal, 6)
-        .background(.ultraThinMaterial)
+        .background(isHovering ? Color.omoiGray : Color.omoiDarkGray)
         .cornerRadius(6)
         .onContinuousHover { phase in
             switch phase {
