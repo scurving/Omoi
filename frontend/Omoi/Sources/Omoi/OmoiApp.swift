@@ -117,7 +117,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         print("👋 [AppDelegate] Application is terminating...")
         KeystrokeMonitor.shared.stop()
-        try? LaunchAgentManager.shared.unload()
+        // Do NOT unload LaunchAgent — it should stay loaded so launchd restarts us
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
