@@ -31,7 +31,7 @@ extension DashboardView {
             .padding(.horizontal, 20)
 
             HStack(spacing: 2) {
-                ForEach(6..<24, id: \.self) { hour in
+                ForEach(0..<24, id: \.self) { hour in
                     let data = hourlyData(for: hour)
                     VStack(spacing: 1) {
                         Rectangle()
@@ -64,8 +64,8 @@ extension DashboardView {
 
             // Hour labels (every 3 hours)
             HStack(spacing: 0) {
-                ForEach(6..<24, id: \.self) { hour in
-                    Text(hour % 3 == 0 ? "\(hour > 12 ? hour - 12 : hour)\(hour >= 12 ? "p" : "a")" : "")
+                ForEach(0..<24, id: \.self) { hour in
+                    Text(hour % 4 == 0 ? "\(hour == 0 ? 12 : hour > 12 ? hour - 12 : hour)\(hour >= 12 ? "p" : "a")" : "")
                         .font(OmoiFont.mono(size: 8))
                         .foregroundStyle(Color.omoiMuted)
                         .frame(maxWidth: .infinity)
